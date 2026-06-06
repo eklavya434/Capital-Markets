@@ -285,7 +285,7 @@ function processDashboardData(data) {
         ? "Custom Index Close Price Overlayed with Composite Market Regimes"
         : "Nifty 50 Index Close Price Overlayed with Composite Market Regimes";
 
-    document.getElementById("stockComparisonChartTitle").textContent = isCustom
+    document.getElementById("comparisonChartTitle").textContent = isCustom
         ? "Custom Asset Portfolio Normalized to 100 at Start Date"
         : "Blue-Chip Stock Portfolio Normalized to 100 at Start Date";
 
@@ -729,7 +729,7 @@ function renderPCACharts(pcaData, pcaVar, k) {
                     backgroundColor: 'rgba(59, 130, 246, 0.6)',
                     borderColor: '#3b82f6',
                     borderWidth: 1,
-                    yAxisID: 'y-ind',
+                    yAxisID: 'y',
                     borderRadius: 4
                 },
                 {
@@ -741,7 +741,7 @@ function renderPCACharts(pcaData, pcaVar, k) {
                     fill: false,
                     pointRadius: 4,
                     pointBackgroundColor: '#22c55e',
-                    yAxisID: 'y-cum'
+                    yAxisID: 'y1'
                 }
             ]
         },
@@ -753,14 +753,14 @@ function renderPCACharts(pcaData, pcaVar, k) {
                     grid: { color: 'rgba(255, 255, 255, 0.03)' },
                     ticks: { color: '#94a3b8', font: { family: 'Outfit' } }
                 },
-                'y-ind': {
+                y: {
                     type: 'linear',
                     position: 'left',
                     title: { display: true, text: 'Individual Variance (%)', color: '#94a3b8', font: { family: 'Outfit' } },
                     grid: { color: 'rgba(255, 255, 255, 0.03)' },
                     ticks: { color: '#94a3b8' }
                 },
-                'y-cum': {
+                y1: {
                     type: 'linear',
                     position: 'right',
                     max: 100,
