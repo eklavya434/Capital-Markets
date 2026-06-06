@@ -369,6 +369,7 @@ function renderIndicatorsChart(priceData) {
 
     const ctx = document.getElementById("indicatorsChart").getContext("2d");
     new Chart(ctx, {
+        type: 'line',
         data: {
             labels: dates,
             datasets: [
@@ -626,6 +627,7 @@ function renderPCACharts(pcaData, pcaVar) {
 
     const ctxVariance = document.getElementById("pcaVarianceChart").getContext("2d");
     new Chart(ctxVariance, {
+        type: 'bar',
         data: {
             labels: pcLabels,
             datasets: [
