@@ -63,6 +63,11 @@
                         <input type="checkbox" class="stock-chk" value="MARUTI.NS" checked> Maruti Suzuki
                     </label>
                 </div>
+                <!-- Dynamic Custom Ticker Input -->
+                <div style="margin-top: 1rem; display: flex; gap: 0.4rem;">
+                    <input type="text" id="customTickerInput" placeholder="Add custom ticker (e.g. AAPL)" style="flex: 1; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.45rem 0.6rem; color: var(--text-primary); font-size: 0.78rem; outline: none; font-family: var(--font-mono); transition: border-color 0.2s;">
+                    <button id="addTickerBtn" style="background: var(--accent); border: none; border-radius: 6px; padding: 0 0.85rem; color: white; cursor: pointer; font-size: 0.78rem; font-weight: 600; transition: all 0.2s;">Add</button>
+                </div>
             </div>
 
             <!-- Parameters Sliders -->
@@ -179,7 +184,12 @@
                 <div class="card">
                     <div class="card-title">
                         <span id="priceChartTitle">Nifty 50 Index Close Price Overlayed with Composite Market Regimes</span>
-                        <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: normal;">Every 5th trading day plotted | Segments connected</span>
+                        <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem;">
+                            <span style="color: var(--text-secondary); font-weight: normal;">Focus Asset:</span>
+                            <select id="benchmarkSelector" style="background: rgba(10, 20, 38, 0.9); border: 1px solid var(--border-color); border-radius: 4px; padding: 0.25rem 0.5rem; color: var(--accent); font-family: var(--font-mono); font-weight: bold; outline: none; cursor: pointer; transition: border-color 0.2s;">
+                                <option value="">Nifty 50 (Benchmark)</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="chart-wrapper chart-wrapper-tall">
                         <canvas id="priceChart"></canvas>

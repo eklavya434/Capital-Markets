@@ -49,6 +49,61 @@ document.addEventListener("DOMContentLoaded", () => {
     rsiWin.addEventListener("input", () => { rsiVal.textContent = rsiWin.value + "d"; debouncedUpdate(); });
     kNum.addEventListener("input", () => { kVal.textContent = kNum.value; debouncedUpdate(); });
 
+    // Focus Benchmark Selector Change Event
+    const benchmarkSelector = document.getElementById("benchmarkSelector");
+    if (benchmarkSelector) {
+        benchmarkSelector.addEventListener("change", () => {
+            updateDashboard();
+        });
+    }
+
+    // Custom Ticker input binding
+    const customTickerInput = document.getElementById("customTickerInput");
+    const addTickerBtn = document.getElementById("addTickerBtn");
+    
+    if (addTickerBtn && customTickerInput) {
+        addTickerBtn.addEventListener("click", () => {
+            const ticker = customTickerInput.value.trim().toUpperCase();
+            if (!ticker) return;
+            
+            showFullPageLoading(`DOWNLOADING & SECURING ${ticker} FROM YAHOO FINANCE...`);
+            
+            fetch(`/api/add_ticker?ticker=${encodeURIComponent(ticker)}`)
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => { throw new Error(err.error || "Failed to download ticker") });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        customTickerInput.value = "";
+                        PRESET_STOCK_NAMES[data.ticker] = data.name;
+                        
+                        const currentChecked = {};
+                        document.querySelectorAll(".stock-chk").forEach(chk => {
+                            currentChecked[chk.value] = chk.checked;
+                        });
+                        currentChecked[data.ticker] = true;
+                        
+                        renderStockCheckboxes(Object.keys(PRESET_STOCK_NAMES), currentChecked);
+                        updateDashboard();
+                    }
+                })
+                .catch(error => {
+                    console.error("Add ticker error:", error);
+                    hideFullPageLoading();
+                    alert("Could not load ticker: " + error.message);
+                });
+        });
+
+        customTickerInput.addEventListener("keyup", (event) => {
+            if (event.key === "Enter") {
+                addTickerBtn.click();
+            }
+        });
+    }
+
     // Custom CSV File Upload
     const fileInput = document.getElementById("csvUploadInput");
     fileInput.addEventListener("change", () => {
@@ -215,12 +270,15 @@ function updateDashboard(isInitial = false) {
     const rsi_win = document.getElementById("rsiWin").value;
     const stocks = getSelectedStocks();
 
+    const selector = document.getElementById("benchmarkSelector");
+    const benchmark = selector ? selector.value : "";
+
     const contentArea = document.querySelector(".content-area");
     if (contentArea && !isInitial) {
         contentArea.style.opacity = "0.5";
     }
 
-    const url = `/api/data?k=${k}&vol_win=${vol_win}&ret_win=${ret_win}&mom_win=${mom_win}&rsi_win=${rsi_win}&stocks=${stocks}`;
+    const url = `/api/data?k=${k}&vol_win=${vol_win}&ret_win=${ret_win}&mom_win=${mom_win}&rsi_win=${rsi_win}&stocks=${stocks}&benchmark=${benchmark}`;
 
     fetch(url)
         .then(response => {
@@ -234,7 +292,6 @@ function updateDashboard(isInitial = false) {
             if (contentArea) contentArea.style.opacity = "1.0";
 
             if (isInitial) {
-                // Fade out initial loading overlay
                 hideFullPageLoading();
                 initScrollAnimations();
             }
@@ -281,9 +338,40 @@ function processDashboardData(data) {
 
     // 3. Dynamic Title configurations based on data active presets/custom
     const isCustom = document.getElementById("dataModeBadge").textContent.includes("Custom");
-    document.getElementById("priceChartTitle").textContent = isCustom
-        ? "Custom Index Close Price Overlayed with Composite Market Regimes"
-        : "Nifty 50 Index Close Price Overlayed with Composite Market Regimes";
+    
+    // Update Focus Benchmark selector dropdown
+    const selector = document.getElementById("benchmarkSelector");
+    if (selector) {
+        const currentSelVal = selector.value;
+        selector.innerHTML = "";
+        
+        const defaultOpt = document.createElement("option");
+        defaultOpt.value = "";
+        defaultOpt.textContent = isCustom ? "Custom Index (Default)" : "Nifty 50 (Default)";
+        selector.appendChild(defaultOpt);
+        
+        Object.keys(data.stock_data).forEach((ticker, index) => {
+            const opt = document.createElement("option");
+            opt.value = ticker;
+            const name = data.correlation_matrix.labels[index] || ticker;
+            opt.textContent = name;
+            selector.appendChild(opt);
+        });
+        
+        if (data.stock_data[currentSelVal]) {
+            selector.value = currentSelVal;
+        } else {
+            selector.value = "";
+        }
+    }
+
+    // Dynamic title formatting based on the selected focus asset
+    const activeFocusTicker = selector ? selector.value : "";
+    const activeFocusName = activeFocusTicker 
+        ? (PRESET_STOCK_NAMES[activeFocusTicker] || activeFocusTicker)
+        : (isCustom ? "Custom Index" : "Nifty 50 Index");
+
+    document.getElementById("priceChartTitle").textContent = `${activeFocusName} Close Price Overlayed with Composite Market Regimes`;
 
     document.getElementById("comparisonChartTitle").textContent = isCustom
         ? "Custom Asset Portfolio Normalized to 100 at Start Date"

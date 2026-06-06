@@ -94,7 +94,7 @@ def load_raw_data_if_needed():
         except Exception as e:
             print(f"[!] Error preloading stock {ticker}: {e}")
 
-def run_regime_pipeline(k, vol_win, ret_win, mom_win, rsi_win, selected_stocks):
+def run_regime_pipeline(k, vol_win, ret_win, mom_win, rsi_win, selected_stocks, benchmark_ticker=None):
     global _RAW_PRICE_CACHE, _CUSTOM_PRICE_CACHE
 
     # 1. Check if we use custom uploaded data or default presets
@@ -104,7 +104,10 @@ def run_regime_pipeline(k, vol_win, ret_win, mom_win, rsi_win, selected_stocks):
         if not loaded_stocks:
             loaded_stocks = [s for s in _CUSTOM_PRICE_CACHE['stock_tickers'] if s in df_source.columns]
         short_names = _CUSTOM_PRICE_CACHE['short_names']
-        benchmark_col = 'Nifty50'
+        if benchmark_ticker and benchmark_ticker in df_source.columns:
+            benchmark_col = benchmark_ticker
+        else:
+            benchmark_col = 'Nifty50'
     else:
         load_raw_data_if_needed()
         if BENCHMARK_TICKER not in _RAW_PRICE_CACHE:
@@ -120,7 +123,10 @@ def run_regime_pipeline(k, vol_win, ret_win, mom_win, rsi_win, selected_stocks):
             df_source = pd.merge(df_source, temp_df, on='Date', how='inner')
             
         df_source = df_source.sort_values('Date').reset_index(drop=True)
-        benchmark_col = 'Nifty50'
+        if benchmark_ticker and benchmark_ticker in df_source.columns:
+            benchmark_col = benchmark_ticker
+        else:
+            benchmark_col = 'Nifty50'
 
     if len(loaded_stocks) == 0:
         raise ValueError("No active stocks selected or available for feature averaging.")
@@ -347,8 +353,11 @@ def get_data():
             else:
                 selected_stocks = STOCK_TICKERS
 
+        # Parse benchmark focus ticker
+        benchmark_ticker = request.args.get('benchmark', '').strip()
+
         # Run pipeline dynamically in-memory (takes <15ms)
-        data = run_regime_pipeline(k, vol_win, ret_win, mom_win, rsi_win, selected_stocks)
+        data = run_regime_pipeline(k, vol_win, ret_win, mom_win, rsi_win, selected_stocks, benchmark_ticker)
         return jsonify(data)
     except Exception as e:
         import traceback
@@ -421,6 +430,43 @@ def upload_file():
         import traceback
         traceback.print_exc()
         return jsonify({'error': f"Failed to parse CSV: {str(e)}"}), 500
+
+@app.route('/api/add_ticker')
+def add_ticker():
+    ticker = request.args.get('ticker', '').strip().upper()
+    if not ticker:
+        return jsonify({'error': 'No ticker provided'}), 400
+        
+    global _RAW_PRICE_CACHE
+    if ticker in _RAW_PRICE_CACHE:
+        return jsonify({'success': True, 'ticker': ticker, 'name': SHORT_NAMES.get(ticker, ticker)})
+        
+    try:
+        # Download from yfinance
+        df_stock = yf.download(ticker, start="2010-01-01", end="2024-12-31")
+        if df_stock.empty:
+            return jsonify({'error': f'No data found for ticker {ticker}'}), 400
+            
+        df_stock = df_stock.reset_index()
+        if isinstance(df_stock.columns, pd.MultiIndex):
+            df_stock.columns = [col[0] for col in df_stock.columns]
+        df_stock['Date'] = pd.to_datetime(df_stock['Date'])
+        df_stock['Close'] = df_stock['Close'].astype(float)
+        _RAW_PRICE_CACHE[ticker] = df_stock[['Date', 'Close']].copy()
+        
+        # Get short name
+        try:
+            info = yf.Ticker(ticker).info
+            short_name = info.get('shortName', ticker)
+            short_name = short_name.replace('Industries', '').replace('Limited', '').replace('Ltd', '').strip()
+            short_name = short_name[:12]
+        except Exception:
+            short_name = ticker[:12]
+            
+        SHORT_NAMES[ticker] = short_name
+        return jsonify({'success': True, 'ticker': ticker, 'name': short_name})
+    except Exception as e:
+        return jsonify({'error': f'Failed to download ticker {ticker}: {str(e)}'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='127.0.0.1', port=5000)
