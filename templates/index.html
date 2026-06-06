@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nifty 50 Market Regime Dynamics | Quant Dashboard</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <!-- Loading Screen Overlay -->
+    <div id="loadingScreen" class="loading-screen">
+        <div class="spinner"></div>
+        <div class="loading-text">ENGINEERING QUANT MODEL...</div>
+    </div>
+
+    <!-- Fixed Navbar -->
+    <nav class="navbar">
+        <div class="brand">
+            <div class="brand-icon">N</div>
+            <h1 class="brand-title">Nifty 50 Market Regime Analytics</h1>
+        </div>
+        <div class="nav-links">
+            <span class="nav-badge">Asset: ^NSEI</span>
+            <span class="nav-badge">Period: 2010 - 2024</span>
+        </div>
+    </nav>
+
+    <!-- Main Dashboard Container -->
+    <main class="dashboard-container">
+        
+        <!-- KPI Analytics Strip -->
+        <div class="kpi-strip">
+            <div class="kpi-card">
+                <span class="kpi-label">Analyzed Days</span>
+                <span class="kpi-value" id="kpi-days">--</span>
+            </div>
+            <div class="kpi-card">
+                <span class="kpi-label">Silhouette Score (K=3)</span>
+                <span class="kpi-value" id="kpi-silhouette">--</span>
+            </div>
+            <div class="kpi-card">
+                <span class="kpi-label">PC1 Variance Explained</span>
+                <span class="kpi-value" id="kpi-pc1">--</span>
+            </div>
+            <div class="kpi-card">
+                <span class="kpi-label">Cumulative 2D Var (PC1+PC2)</span>
+                <span class="kpi-value" id="kpi-pccum">--</span>
+            </div>
+        </div>
+
+        <!-- SECTION 1: PRICE TIMELINE (Regime Colored) -->
+        <section id="section-price" class="fade-in-section">
+            <h2 class="section-header">1. Market Price & Regime Timeline</h2>
+            <div class="card">
+                <div class="card-title">
+                    <span>Nifty 50 Index Close Price Overlayed with Unsupervised Regimes</span>
+                    <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: normal;">Every 5th trading day plotted</span>
+                </div>
+                <div class="chart-wrapper chart-wrapper-tall">
+                    <canvas id="priceChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 2: VOLATILITY AREA + RSI LINE -->
+        <section id="section-indicators" class="fade-in-section">
+            <h2 class="section-header">2. Volatility and Momentum Metrics</h2>
+            <div class="card">
+                <div class="card-title">
+                    <span>21-Day Annualized Volatility (Area) & RSI-14 (Line)</span>
+                    <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: normal;">Dual-Axis Combo View</span>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="indicatorsChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 3: ELBOW + SILHOUETTE OPTIMIZATION -->
+        <section id="section-optimization" class="fade-in-section">
+            <h2 class="section-header">3. Clustering Model Optimization</h2>
+            <div class="grid-2-equal">
+                <div class="card">
+                    <div class="card-title">Elbow Optimization Curve (K=2 to 8)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="elbowChart"></canvas>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Silhouette Score Comparison (K=2 to 8)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="silhouetteChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 4: PCA SCATTER + EXPLAINED VARIANCE -->
+        <section id="section-pca" class="fade-in-section">
+            <h2 class="section-header">4. Dimensionality Reduction (PCA)</h2>
+            <div class="grid-2">
+                <div class="card">
+                    <div class="card-title">2D PCA Scatter Projection (K-Means Clusters)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="pcaScatterChart"></canvas>
+                    </div>
+                </div>
+                <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+                    <div>
+                        <div class="card-title">Principal Component Explained Variance</div>
+                        <div class="chart-wrapper" style="min-height: 280px;">
+                            <canvas id="pcaVarianceChart"></canvas>
+                        </div>
+                    </div>
+                    <div style="border-top: 1px solid var(--border-color); padding-top: 1.25rem; margin-top: 1rem; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5;">
+                        <p><b>PC1 & PC2:</b> The first two components describe a large percentage of overall features variance. This justifies clustering on the reduced 2D plane for clean spatial partition.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 5: DOUGHNUT + STATS TABLE -->
+        <section id="section-breakdown" class="fade-in-section">
+            <h2 class="section-header">5. Regime Analytics & Summary Statistics</h2>
+            <div class="grid-2" style="grid-template-columns: 0.7fr 1.3fr;">
+                <div class="card">
+                    <div class="card-title">Regime Time Distribution</div>
+                    <div class="chart-wrapper">
+                        <canvas id="doughnutChart"></canvas>
+                    </div>
+                </div>
+                <div class="card" style="display: flex; flex-direction: column; justify-content: center;">
+                    <div class="card-title">Performance Summary Profile</div>
+                    <div style="overflow-x: auto;">
+                        <table id="summaryTable">
+                            <thead>
+                                <tr>
+                                    <th>Regime State</th>
+                                    <th>Observed Days</th>
+                                    <th>% share</th>
+                                    <th>Avg Return (21d)</th>
+                                    <th>Avg Volatility</th>
+                                    <th>Avg RSI</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Loaded dynamically via app.js -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 6: METHODOLOGY AND MATH -->
+        <section id="section-methodology" class="fade-in-section">
+            <h2 class="section-header">6. Quantitative Methodology Reference</h2>
+            <div class="method-grid">
+                <div class="method-card">
+                    <div class="method-num">01</div>
+                    <h3>Feature Engineering</h3>
+                    <p>Calculates 6 mathematical metrics: Daily Log Return, 21d Volatility (Annualized), 21d Mean Return, 63d Momentum, RSI-14, and the 50d/200d Moving Average Ratio.</p>
+                </div>
+                <div class="method-card">
+                    <div class="method-num">02</div>
+                    <h3>PCA & Clustering</h3>
+                    <p>Standardizes indicators with `StandardScaler`, applies PCA, and clusters the space into $K=3$ groups. Centroids are dynamically ranked by 21d mean return to designate 🔴 Bear, 🟡 Sideways, and 🟢 Bull regimes.</p>
+                </div>
+                <div class="method-card">
+                    <div class="method-num">03</div>
+                    <h3>Ward Linkage</h3>
+                    <p>Daily indicators are downsampled to monthly frequency using <code>resample("ME")</code>. Agglomerative Hierarchical clustering utilizes the <b>Ward variance-minimization linkage</b> to explore macro trends.</p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- App JS logic -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

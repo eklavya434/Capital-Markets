@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Equity Market Regime Analysis | Quantitative Portfolio Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div style="text-align: center;">
+            <div class="spinner" style="margin: 0 auto 1.5rem;"></div>
+            <p style="color: var(--text-secondary); font-size: 0.95rem; letter-spacing: 0.05em;">PROCESSING MARKET DATA...</p>
+        </div>
+    </div>
+
+    <!-- Main Header -->
+    <header>
+        <div class="logo-container">
+            <div class="logo-icon">Q</div>
+            <div class="logo-text">
+                <h1>Equity Market Regime Analysis</h1>
+                <p>Advanced Quantitative Clustering & Dimensionality Reduction</p>
+            </div>
+        </div>
+        <div>
+            <span class="badge" id="dataStatusBadge" style="background-color: rgba(59, 130, 246, 0.1); color: var(--accent-blue); border: 1px solid rgba(59, 130, 246, 0.2)">SPY Preset Active</span>
+        </div>
+    </header>
+
+    <!-- Main Layout -->
+    <div class="main-layout">
+        
+        <!-- Sidebar Controls -->
+        <aside class="sidebar">
+            
+            <!-- Data Selection -->
+            <div>
+                <h3 class="section-title">Market Data Source</h3>
+                <div class="control-group">
+                    <div class="control-item">
+                        <label for="datasetSelect">Select Asset</label>
+                        <select id="datasetSelect">
+                            <option value="SPY">S&P 500 ETF (SPY) - Equity Preset</option>
+                            <option value="BTC">Bitcoin (BTC) - Crypto Preset</option>
+                            <option value="GLD">Gold ETF (GLD) - Commodity Preset</option>
+                            <option value="CSV">Upload Custom CSV...</option>
+                        </select>
+                    </div>
+                    
+                    <div class="control-item" id="csvUploadWrapper" style="display: none;">
+                        <label>Upload Close Price CSV</label>
+                        <div class="file-upload-wrapper">
+                            <label class="file-upload-label" for="csvFileInput">
+                                <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="vertical-align: middle;">
+                                    <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                                    <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"/>
+                                </svg>
+                                Choose CSV File
+                            </label>
+                            <input type="file" id="csvFileInput" accept=".csv">
+                        </div>
+                        <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; line-height: 1.3;">
+                            Requires columns <b>Date</b> and <b>Close</b> (or Price). Format: YYYY-MM-DD, decimal price.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Feature Engineering -->
+            <div>
+                <h3 class="section-title">Feature Engineering</h3>
+                <div class="control-group">
+                    <div class="control-item">
+                        <label for="returnWindow">Rolling Returns Window <span class="val-display" id="returnWindowVal">21d</span></label>
+                        <input type="range" id="returnWindow" min="5" max="60" value="21">
+                    </div>
+                    
+                    <div class="control-item">
+                        <label for="volWindow">Rolling Volatility Window <span class="val-display" id="volWindowVal">21d</span></label>
+                        <input type="range" id="volWindow" min="5" max="60" value="21">
+                    </div>
+                    
+                    <div class="control-item">
+                        <label for="drawdownWindow">Rolling Drawdown Window <span class="val-display" id="drawdownWindowVal">21d</span></label>
+                        <input type="range" id="drawdownWindow" min="5" max="60" value="21">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Clustering Parameters -->
+            <div>
+                <h3 class="section-title">Unsupervised Clustering</h3>
+                <div class="control-group">
+                    <div class="control-item">
+                        <label for="clusterCount">K-Means Cluster Count (K) <span class="val-display" id="clusterCountVal">3</span></label>
+                        <input type="range" id="clusterCount" min="2" max="4" value="3">
+                        <p style="font-size: 0.7rem; color: var(--text-muted); line-height: 1.3;">
+                            K=3 aligns logically to Bear, Sideways, and Bull phases.
+                        </p>
+                    </div>
+                    
+                    <div class="control-item">
+                        <label for="linkageSelect">Hierarchical Linkage</label>
+                        <select id="linkageSelect">
+                            <option value="average">Average Linkage (Recommended)</option>
+                            <option value="complete">Complete Linkage</option>
+                            <option value="single">Single Linkage</option>
+                        </select>
+                    </div>
+                    
+                    <div class="control-item">
+                        <label for="dendrogramLimit">Dendrogram History <span class="val-display" id="dendrogramLimitVal">150d</span></label>
+                        <input type="range" id="dendrogramLimit" min="50" max="300" step="10" value="150">
+                        <p style="font-size: 0.7rem; color: var(--text-muted); line-height: 1.3;">
+                            Restricts hierarchical clustering size for responsive browser calculations.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+        </aside>
+        
+        <!-- Main Dashboard View -->
+        <main class="content-area">
+            
+            <!-- Tabs Header -->
+            <nav class="tabs-navigation">
+                <button class="tab-btn active" data-tab="tab-regimes">Price & Regime Overlay</button>
+                <button class="tab-btn" data-tab="tab-pca">PCA Feature Space</button>
+                <button class="tab-btn" data-tab="tab-hierarchical">Hierarchical Dendrogram</button>
+                <button class="tab-btn" data-tab="tab-profiles">Regime Profile Stats</button>
+                <button class="tab-btn" data-tab="tab-python">Python Code Reference</button>
+            </nav>
+            
+            <!-- Tab Panels -->
+            
+            <!-- 1. PRICE & REGIMES OVERLAY -->
+            <section class="tab-panel active" id="tab-regimes">
+                <!-- Summary Metrics Grid -->
+                <div class="grid-3" id="quickMetricsGrid">
+                    <div class="stat-card bull">
+                        <div class="stat-label">Bull Market Regime</div>
+                        <div class="stat-value" id="bullDaysPct">0.0%</div>
+                        <div class="stat-desc" id="bullMetricsText">Avg Return: -- | Vol: --</div>
+                    </div>
+                    <div class="stat-card sideways">
+                        <div class="stat-label">Sideways Regime</div>
+                        <div class="stat-value" id="sidewaysDaysPct">0.0%</div>
+                        <div class="stat-desc" id="sidewaysMetricsText">Avg Return: -- | Vol: --</div>
+                    </div>
+                    <div class="stat-card bear">
+                        <div class="stat-label">Bear Market Regime</div>
+                        <div class="stat-value" id="bearDaysPct">0.0%</div>
+                        <div class="stat-desc" id="bearMetricsText">Avg Return: -- | Vol: --</div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-title">
+                        <span>Historical Price & Clustering Overlay</span>
+                        <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: normal;">
+                            Hover points to view regime features
+                        </span>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="priceRegimeChart"></canvas>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- 2. PCA FEATURE SPACE -->
+            <section class="tab-panel" id="tab-pca">
+                <div class="grid-2">
+                    <div class="card">
+                        <div class="card-title">2D PCA Cluster Projection</div>
+                        <div class="chart-container" style="min-height: 380px;">
+                            <canvas id="pcaScatterChart"></canvas>
+                        </div>
+                        <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 1rem; line-height: 1.4;">
+                            Data projected onto the first two Principal Components. This visually confirms if K-Means has successfully partitioned the feature space into distinct statistical zones.
+                        </p>
+                    </div>
+                    
+                    <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <div class="card-title">PCA Component Loadings</div>
+                            <table id="pcaLoadingsTable">
+                                <thead>
+                                    <tr>
+                                        <th>Feature</th>
+                                        <th style="font-family: 'JetBrains Mono', monospace;">PC1</th>
+                                        <th style="font-family: 'JetBrains Mono', monospace;">PC2</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Populated dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color);">
+                            <div class="card-title" style="margin-bottom: 0.5rem; border: none; padding: 0;">Explained Variance Ratio</div>
+                            <div style="display: flex; justify-content: space-between; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; margin-bottom: 0.5rem;">
+                                <span>PC1 Variance:</span>
+                                <span id="pc1VariancePct" style="color: var(--accent-blue); font-weight: 600;">--</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; margin-bottom: 0.5rem;">
+                                <span>PC2 Variance:</span>
+                                <span id="pc2VariancePct" style="color: var(--accent-blue); font-weight: 600;">--</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; font-weight: 600; padding-top: 0.5rem; border-top: 1px dashed var(--border-color);">
+                                <span>Cumulative 2D Explained:</span>
+                                <span id="pcCumulativePct" style="color: var(--regime-bull);">--</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- 3. HIERARCHICAL DENDROGRAM -->
+            <section class="tab-panel" id="tab-hierarchical">
+                <div class="card">
+                    <div class="card-title">
+                        <span>Agglomerative Hierarchical Dendrogram</span>
+                        <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: normal;" id="dendrogramSpan">
+                            Clustered last 150 days
+                        </span>
+                    </div>
+                    <div class="dendrogram-svg-container">
+                        <!-- Custom SVG populated dynamically -->
+                        <svg id="dendrogramSvg" class="dendrogram-svg" width="800" height="400"></svg>
+                    </div>
+                    <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 1rem; line-height: 1.4;">
+                        The dendrogram illustrates how the recent trading days merge hierarchically based on feature similarity. Y-axis represents merge height (Euclidean distance threshold). Colored branches indicate active cluster groups.
+                    </p>
+                </div>
+            </section>
+            
+            <!-- 4. REGIME PROFILES & STATS -->
+            <section class="tab-panel" id="tab-profiles">
+                <div class="card">
+                    <div class="card-title">Statistical Summary of Identified Regimes</div>
+                    <table id="regimeStatsTable">
+                        <thead>
+                            <tr>
+                                <th>Regime Label</th>
+                                <th>Observed Days</th>
+                                <th>% of Total</th>
+                                <th>Avg Return (d)</th>
+                                <th>Ann. Volatility</th>
+                                <th>Max Drawdown</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="grid-2">
+                    <div class="card">
+                        <div class="card-title">Economic Interpretation</div>
+                        <ul style="color: var(--text-secondary); font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.75rem; padding-left: 1rem;">
+                            <li><b style="color: var(--regime-bull);">Bull Phase:</b> Characterized by positive average daily returns, low-to-medium rolling volatility, and contained maximum drawdowns. It represents stable upward-trending market environments.</li>
+                            <li><b style="color: var(--regime-bear);">Bear Phase:</b> Marked by negative average returns, elevated rolling volatility (high uncertainty), and severe drawdowns. Standard deviation surges during these market corrections.</li>
+                            <li><b style="color: var(--regime-sideways);">Sideways Phase:</b> Exhibits near-zero average returns, very low rolling volatility, and minimal trend strength. Price oscillates inside horizontal trading ranges.</li>
+                        </ul>
+                    </div>
+                    <div class="card">
+                        <div class="card-title">Quantitative Features Profile</div>
+                        <p style="color: var(--text-secondary); font-size: 0.85rem; line-height: 1.5; margin-bottom: 0.75rem;">
+                            Features are generated dynamically using the rolling lookback sliders on the sidebar. Standardization centers each feature around zero (0) mean. The clustering algorithm identifies distinct centroids in this scaled coordinate system.
+                        </p>
+                        <p style="color: var(--text-secondary); font-size: 0.85rem; line-height: 1.5;">
+                            PCA helps reduce collinearity among the three rolling dimensions, enabling a clean visual projection while capturing up to 80-90% of variance in the first two components.
+                        </p>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- 5. PYTHON CODE REFERENCE -->
+            <section class="tab-panel" id="tab-python">
+                <div class="card">
+                    <div class="card-title">
+                        <span>Python Scikit-Learn Equivalents</span>
+                        <button class="copy-btn" id="copyCodeBtn">Copy to Clipboard</button>
+                    </div>
+                    <pre><code id="pythonCodeBlock"># Python Quantitative Finance Implementation
+import yfinance as yf
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
+import scipy.cluster.hierarchy as sch
+
+# 1. Load Data
+df = yf.download("SPY", start="2023-01-01", end="2026-06-01")
+df = df.reset_index()[['Date', 'Close']]
+
+# 2. Feature Engineering
+# Daily Return
+df['Daily_Return'] = df['Close'].pct_change()
+# Rolling Returns (21-day)
+df['Rolling_Return'] = df['Close'].pct_change(periods=21)
+# Rolling Volatility (21-day std dev of daily returns)
+df['Rolling_Vol'] = df['Daily_Return'].rolling(window=21).std()
+# Rolling Drawdown (21-day max drawdown)
+rolling_max = df['Close'].rolling(window=21, min_periods=1).max()
+df['Rolling_DD'] = (rolling_max - df['Close']) / rolling_max
+
+# Drop NaNs
+df = df.dropna().reset_index(drop=True)
+features = ['Rolling_Return', 'Rolling_Vol', 'Rolling_DD']
+X = df[features].values
+
+# 3. Standard Scaling
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+# 4. Dimensionality Reduction (PCA)
+pca = PCA(n_components=2)
+X_pca = pca.fit_transform(X_scaled)
+print(f"Explained Variance: {pca.explained_variance_ratio_}")
+
+# 5. K-Means Clustering
+kmeans = KMeans(n_clusters=3, random_state=42, init='k-means++')
+df['Regime'] = kmeans.fit_predict(X_scaled)
+
+# 6. Hierarchical Clustering (Linkage)
+# Perform Linkage on the last 150 days of scaled features
+linkage_matrix = sch.linkage(X_scaled[-150:], method='average')
+# The linkage matrix can be plotted using sch.dendrogram()
+</code></pre>
+                </div>
+            </section>
+            
+        </main>
+    </div>
+
+    <!-- Load JS assets -->
+    <script src="js/presetData.js"></script>
+    <script src="js/math.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
