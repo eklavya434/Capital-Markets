@@ -124,6 +124,36 @@ body {
     gap: 2.5rem;
 }
 
+/* Stock Badges Container inside Hero card */
+.ticker-badges-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    width: 100%;
+    margin-top: 0.25rem;
+}
+
+.ticker-badge {
+    background: rgba(59, 130, 246, 0.04);
+    border: 1px solid rgba(59, 130, 246, 0.18);
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    font-weight: 500;
+    padding: 0.45rem 0.85rem;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    cursor: default;
+    user-select: none;
+}
+
+.ticker-badge:hover {
+    background: rgba(59, 130, 246, 0.12);
+    border-color: var(--accent);
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.15);
+    transform: translateY(-1px);
+}
+
 /* KPI Strip */
 .kpi-strip {
     display: grid;

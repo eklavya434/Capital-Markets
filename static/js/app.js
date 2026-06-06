@@ -3,7 +3,7 @@
  */
 
 document.addEventListener("DOMContentLoaded", () => {
-    // 1. Fetch API Data
+    // Fetch API Data from Flask endpoint
     fetch("/api/data")
         .then(response => {
             if (!response.ok) {
@@ -12,14 +12,16 @@ document.addEventListener("DOMContentLoaded", () => {
             return response.json();
         })
         .then(data => {
-            // Populate KPIs
-            document.getElementById("kpi-days").textContent = data.total_days.toLocaleString();
+            // Populate KPI values
+            document.getElementById("kpi-days").textContent = data.metrics.total_days.toLocaleString();
             document.getElementById("kpi-silhouette").textContent = data.metrics.silhouette.toFixed(3);
             document.getElementById("kpi-pc1").textContent = data.metrics.pc1_pct.toFixed(1) + "%";
             document.getElementById("kpi-pccum").textContent = data.metrics.pc_cum_pct.toFixed(1) + "%";
 
             // Render all dashboard charts
             renderPriceChart(data.price_data);
+            renderStockComparisonChart(data.price_data, data.stock_data);
+            drawCorrelationHeatmap(data.correlation_matrix);
             renderIndicatorsChart(data.price_data);
             renderElbowAndSilhouette(data.elbow_data);
             renderPCACharts(data.pca_data, data.pca_var);
@@ -51,8 +53,6 @@ function renderPriceChart(priceData) {
     const prices = priceData.map(d => d.price);
     const regimes = priceData.map(d => d.regime);
 
-    // Segment data by regime. To prevent gaps at transition points,
-    // each dataset includes the connecting point of a new regime.
     const bearPrices = [];
     const sidewaysPrices = [];
     const bullPrices = [];
@@ -154,13 +154,114 @@ function renderPriceChart(priceData) {
                     bodyFont: { family: 'Outfit', size: 12 },
                     backgroundColor: 'rgba(5, 13, 26, 0.95)',
                     borderColor: 'rgba(255, 255, 255, 0.1)',
+                    borderWidth: 1
+                }
+            }
+        }
+    });
+}
+
+/**
+ * 2. SECTION 2: MULTI-LINE STOCK COMPARISON CHART (Normalized to 100)
+ */
+function renderStockComparisonChart(priceData, stockData) {
+    const dates = priceData.map(d => d.date);
+    
+    // Distinct colors for the 8 stocks
+    const colors = [
+        '#3b82f6', // Reliance (Blue)
+        '#10b981', // TCS (Green)
+        '#ef4444', // HDFC Bank (Red)
+        '#f59e0b', // Infosys (Amber)
+        '#8b5cf6', // ICICI Bank (Purple)
+        '#ec4899', // Wipro (Pink)
+        '#06b6d4', // Bajaj Finance (Cyan)
+        '#e2e8f0'  // Maruti Suzuki (White)
+    ];
+
+    const shortNames = {
+        "RELIANCE.NS": "Reliance",
+        "TCS.NS": "TCS",
+        "HDFCBANK.NS": "HDFC Bank",
+        "INFY.NS": "Infosys",
+        "ICICIBANK.NS": "ICICI Bank",
+        "WIPRO.NS": "Wipro",
+        "BAJFINANCE.NS": "Bajaj Fin",
+        "MARUTI.NS": "Maruti"
+    };
+
+    const datasets = Object.keys(stockData).map((ticker, index) => {
+        const prices = stockData[ticker];
+        const startPrice = prices[0];
+        
+        // Normalize: Price_t / Price_0 * 100
+        const normalizedPrices = prices.map(p => startPrice === 0 ? 0 : (p / startPrice) * 100);
+        const color = colors[index % colors.length];
+
+        return {
+            label: shortNames[ticker] || ticker,
+            data: normalizedPrices,
+            borderColor: color,
+            borderWidth: 1.8,
+            pointRadius: 0,
+            fill: false,
+            tension: 0.05
+        };
+    });
+
+    const ctx = document.getElementById("stockComparisonChart").getContext("2d");
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: dates,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                    ticks: {
+                        color: '#94a3b8',
+                        maxTicksLimit: 12,
+                        font: { family: 'Outfit', size: 11 }
+                    }
+                },
+                y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                    title: {
+                        display: true,
+                        text: 'Performance Index (Normalized to 100)',
+                        color: '#94a3b8',
+                        font: { family: 'Outfit', size: 12 }
+                    },
+                    ticks: {
+                        color: '#94a3b8',
+                        font: { family: 'Outfit', size: 11 }
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        color: '#f8fafc',
+                        font: { family: 'Outfit', size: 11 },
+                        usePointStyle: true
+                    }
+                },
+                tooltip: {
+                    intersect: false,
+                    mode: 'index',
+                    titleFont: { family: 'Outfit', size: 13 },
+                    bodyFont: { family: 'Outfit', size: 12 },
+                    backgroundColor: 'rgba(5, 13, 26, 0.95)',
+                    borderColor: 'rgba(255, 255, 255, 0.1)',
                     borderWidth: 1,
                     callbacks: {
                         label: function(context) {
-                            const val = context.parsed.y;
-                            if (val !== null && val !== undefined) {
-                                return `${context.dataset.label}: ${val.toFixed(2)}`;
-                            }
+                            return `${context.dataset.label}: ${context.parsed.y.toFixed(1)}`;
                         }
                     }
                 }
@@ -170,11 +271,100 @@ function renderPriceChart(priceData) {
 }
 
 /**
- * 2. SECTION 2: VOLATILITY AREA + RSI LINE (Combo Dual-Axis)
+ * 3. SECTION 3: PAIRWISE CORRELATION HEATMAP (Canvas Element)
+ */
+function drawCorrelationHeatmap(correlationData) {
+    const canvas = document.getElementById("heatmapCanvas");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+
+    const matrix = correlationData.matrix;
+    const labels = correlationData.labels;
+    const n = matrix.length;
+
+    // Dimensions
+    const width = canvas.width;
+    const height = canvas.height;
+    const paddingLeft = 85;
+    const paddingTop = 35;
+    const paddingRight = 35;
+    const paddingBottom = 85;
+
+    const plotWidth = width - paddingLeft - paddingRight;
+    const plotHeight = height - paddingTop - paddingBottom;
+    const cellSize = plotWidth / n;
+
+    // Clear Canvas
+    ctx.clearRect(0, 0, width, height);
+
+    // Diverging Color scale: Blue (Negative) -> Slate (Neutral) -> Red (Positive)
+    function getColor(v) {
+        let r, g, b;
+        if (v >= 0) {
+            // Interpolate between Slate background (30, 41, 59) and Red (239, 68, 68)
+            r = Math.round(30 + v * (239 - 30));
+            g = Math.round(41 + v * (68 - 41));
+            b = Math.round(59 + v * (68 - 59));
+        } else {
+            // Interpolate between Slate (30, 41, 59) and Blue (59, 130, 246)
+            const absV = Math.abs(v);
+            r = Math.round(30 + absV * (59 - 30));
+            g = Math.round(41 + absV * (130 - 41));
+            b = Math.round(59 + absV * (246 - 59));
+        }
+        return `rgb(${r}, ${g}, ${b})`;
+    }
+
+    // Draw grid cells and correlation values
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "bold 9px 'DM Mono', monospace";
+
+    for (let i = 0; i < n; i++) {
+        for (let j = 0; j < n; j++) {
+            const val = matrix[i][j];
+            const cellX = paddingLeft + j * cellSize;
+            const cellY = paddingTop + i * cellSize;
+
+            // Draw box
+            ctx.fillStyle = getColor(val);
+            ctx.fillRect(cellX, cellY, cellSize - 1, cellSize - 1);
+
+            // Draw number inside
+            ctx.fillStyle = "#ffffff";
+            ctx.fillText(val.toFixed(2), cellX + cellSize / 2, cellY + cellSize / 2);
+        }
+    }
+
+    // Draw labels
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "500 10px 'Outfit', sans-serif";
+
+    // Y-axis labels (row names)
+    ctx.textAlign = "right";
+    for (let i = 0; i < n; i++) {
+        const labelY = paddingTop + i * cellSize + cellSize / 2;
+        ctx.fillText(labels[i], paddingLeft - 10, labelY);
+    }
+
+    // X-axis labels (col names, tilted 45 degrees)
+    ctx.textAlign = "left";
+    for (let j = 0; j < n; j++) {
+        const labelX = paddingLeft + j * cellSize + cellSize / 2;
+        ctx.save();
+        ctx.translate(labelX, height - paddingBottom + 10);
+        ctx.rotate(Math.PI / 4); // 45 degrees rotation
+        ctx.fillText(labels[j], 0, 0);
+        ctx.restore();
+    }
+}
+
+/**
+ * 4. SECTION 4: VOLATILITY AREA + RSI LINE (Combo Dual-Axis)
  */
 function renderIndicatorsChart(priceData) {
     const dates = priceData.map(d => d.date);
-    const vols = priceData.map(d => d.volatility * 100); // Express as %
+    const vols = priceData.map(d => d.volatility * 100); 
     const rsis = priceData.map(d => d.rsi);
 
     const ctx = document.getElementById("indicatorsChart").getContext("2d");
@@ -184,7 +374,7 @@ function renderIndicatorsChart(priceData) {
             datasets: [
                 {
                     type: 'line',
-                    label: '21d Annualized Volatility',
+                    label: 'Annualized Volatility',
                     data: vols,
                     borderColor: '#3b82f6',
                     borderWidth: 1.5,
@@ -203,7 +393,6 @@ function renderIndicatorsChart(priceData) {
                     pointRadius: 0,
                     yAxisID: 'y-rsi'
                 },
-                // Constant lines for RSI 70/30 reference
                 {
                     type: 'line',
                     label: 'Overbought (70)',
@@ -250,27 +439,21 @@ function renderIndicatorsChart(priceData) {
                         color: '#94a3b8',
                         font: { family: 'Outfit', size: 11 }
                     },
-                    ticks: {
-                        color: '#94a3b8',
-                        font: { family: 'Outfit', size: 11 }
-                    }
+                    ticks: { color: '#94a3b8' }
                 },
                 'y-rsi': {
                     type: 'linear',
                     position: 'right',
                     min: 10,
                     max: 90,
-                    grid: { drawOnChartArea: false }, // Only keep left-side grid lines
+                    grid: { drawOnChartArea: false },
                     title: {
                         display: true,
                         text: 'RSI-14',
                         color: '#94a3b8',
                         font: { family: 'Outfit', size: 11 }
                     },
-                    ticks: {
-                        color: '#94a3b8',
-                        font: { family: 'Outfit', size: 11 }
-                    }
+                    ticks: { color: '#94a3b8' }
                 }
             },
             plugins: {
@@ -280,7 +463,6 @@ function renderIndicatorsChart(priceData) {
                         color: '#f8fafc',
                         font: { family: 'Outfit', size: 11 },
                         filter: function(item) {
-                            // Hide helper lines from legend
                             return !item.text.includes("Over");
                         }
                     }
@@ -307,7 +489,7 @@ function renderIndicatorsChart(priceData) {
 }
 
 /**
- * 3. SECTION 3: ELBOW + SILHOUETTE OPTIMIZATION
+ * 5. SECTION 5: ELBOW + SILHOUETTE OPTIMIZATION
  */
 function renderElbowAndSilhouette(elbowData) {
     const kVals = elbowData.map(d => d.k);
@@ -321,7 +503,7 @@ function renderElbowAndSilhouette(elbowData) {
         data: {
             labels: kVals,
             datasets: [{
-                label: 'Inertia (Elbow Curve)',
+                label: 'Inertia',
                 data: inertias,
                 borderColor: '#3b82f6',
                 borderWidth: 2,
@@ -346,13 +528,11 @@ function renderElbowAndSilhouette(elbowData) {
                     ticks: { color: '#94a3b8' }
                 }
             },
-            plugins: {
-                legend: { display: false }
-            }
+            plugins: { legend: { display: false } }
         }
     });
 
-    // Silhouette Score Chart
+    // Silhouette Chart
     const ctxSil = document.getElementById("silhouetteChart").getContext("2d");
     new Chart(ctxSil, {
         type: 'bar',
@@ -382,18 +562,15 @@ function renderElbowAndSilhouette(elbowData) {
                     ticks: { color: '#94a3b8' }
                 }
             },
-            plugins: {
-                legend: { display: false }
-            }
+            plugins: { legend: { display: false } }
         }
     });
 }
 
 /**
- * 4. SECTION 4: PCA SCATTER + EXPLAINED VARIANCE
+ * 6. SECTION 6: PCA SCATTER + EXPLAINED VARIANCE
  */
 function renderPCACharts(pcaData, pcaVar) {
-    // Group scatter coordinates by regime
     const bearPoints = [];
     const sidewaysPoints = [];
     const bullPoints = [];
@@ -432,14 +609,12 @@ function renderPCACharts(pcaData, pcaVar) {
                 }
             },
             plugins: {
-                legend: {
-                    labels: { color: '#f8fafc', usePointStyle: true, font: { family: 'Outfit' } }
-                }
+                legend: { labels: { color: '#f8fafc', usePointStyle: true, font: { family: 'Outfit' } } }
             }
         }
     });
 
-    // PCA Explained Variance Combo Chart (Bar + Line)
+    // PCA Explained Variance Combo (Bar + Line)
     const pcLabels = ['PC1', 'PC2', 'PC3', 'PC4', 'PC5', 'PC6'];
     const indVars = pcaVar.map(v => v * 100);
     const cumVars = [];
@@ -502,20 +677,17 @@ function renderPCACharts(pcaData, pcaVar) {
                 }
             },
             plugins: {
-                legend: {
-                    position: 'top',
-                    labels: { color: '#f8fafc', font: { family: 'Outfit', size: 10 } }
-                }
+                legend: { position: 'top', labels: { color: '#f8fafc', font: { family: 'Outfit', size: 10 } } }
             }
         }
     });
 }
 
 /**
- * 5. SECTION 5: DOUGHNUT + SUMMARY STATS TABLE
+ * 7. SECTION 7: DOUGHNUT + SUMMARY STATS TABLE
  */
 function renderBreakdown(pieData, summaryData) {
-    // Doughnut Chart
+    // Doughnut
     const ctxPie = document.getElementById("doughnutChart").getContext("2d");
     new Chart(ctxPie, {
         type: 'doughnut',
@@ -534,18 +706,14 @@ function renderBreakdown(pieData, summaryData) {
             plugins: {
                 legend: {
                     position: 'bottom',
-                    labels: {
-                        color: '#f8fafc',
-                        font: { family: 'Outfit', size: 11 },
-                        usePointStyle: true
-                    }
+                    labels: { color: '#f8fafc', font: { family: 'Outfit', size: 11 }, usePointStyle: true }
                 }
             },
             cutout: '65%'
         }
     });
 
-    // Populate Stats Table
+    // Summary Stats Table
     const tbody = document.getElementById("summaryTable").querySelector("tbody");
     tbody.innerHTML = "";
 
@@ -571,21 +739,21 @@ function renderBreakdown(pieData, summaryData) {
 }
 
 /**
- * IntersectionObserver for Fade-in Scroll Animations
+ * IntersectionObserver setup for Scroll Animations
  */
 function initScrollAnimations() {
     const sections = document.querySelectorAll(".fade-in-section");
     const observerOptions = {
         root: null,
         rootMargin: "0px",
-        threshold: 0.15 // Section trigger threshold
+        threshold: 0.15
     };
 
     const observer = new IntersectionObserver((entries, observer) => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
                 entry.target.classList.add("is-visible");
-                observer.unobserve(entry.target); // Unobserve after triggering once
+                observer.unobserve(entry.target);
             }
         });
     }, observerOptions);

@@ -17,6 +17,30 @@ _DATA_CACHE = None
 _CACHE_TIMESTAMP = 0
 CACHE_EXPIRY = 3600 * 4  # Cache results for 4 hours
 
+# Tickers config
+BENCHMARK_TICKER = "^NSEI"
+STOCK_TICKERS = [
+    "RELIANCE.NS",
+    "TCS.NS",
+    "HDFCBANK.NS",
+    "INFY.NS",
+    "ICICIBANK.NS",
+    "WIPRO.NS",
+    "BAJFINANCE.NS",
+    "MARUTI.NS"
+]
+
+SHORT_NAMES = {
+    "RELIANCE.NS": "Reliance",
+    "TCS.NS": "TCS",
+    "HDFCBANK.NS": "HDFC Bank",
+    "INFY.NS": "Infosys",
+    "ICICIBANK.NS": "ICICI Bank",
+    "WIPRO.NS": "Wipro",
+    "BAJFINANCE.NS": "Bajaj Fin",
+    "MARUTI.NS": "Maruti"
+}
+
 def compute_rsi(prices, window=14):
     """
     Wilder's RSI calculation using exponential moving averages.
@@ -36,69 +60,128 @@ def compute_rsi(prices, window=14):
     rsi = 100 - (100 / (1 + rs))
     return rsi
 
-def generate_regime_data():
+def generate_multi_stock_regime_data():
     global _DATA_CACHE, _CACHE_TIMESTAMP
     
     # Check if cache is still valid
     if _DATA_CACHE is not None and (time.time() - _CACHE_TIMESTAMP) < CACHE_EXPIRY:
         return _DATA_CACHE
 
-    print("[*] Downloading Nifty 50 index (^NSEI) data from Yahoo Finance...")
-    df = yf.download("^NSEI", start="2010-01-01", end="2024-12-31")
-    if df.empty:
-        raise ValueError("No data returned for ^NSEI from Yahoo Finance.")
+    print("[*] Downloading index and stock prices from Yahoo Finance...")
+    
+    data_dfs = {}
+    
+    # 1. Download Benchmark
+    try:
+        df_bench = yf.download(BENCHMARK_TICKER, start="2010-01-01", end="2024-12-31")
+        if not df_bench.empty:
+            df_bench = df_bench.reset_index()
+            if isinstance(df_bench.columns, pd.MultiIndex):
+                df_bench.columns = [col[0] for col in df_bench.columns]
+            df_bench['Date'] = pd.to_datetime(df_bench['Date'])
+            df_bench['Close'] = df_bench['Close'].astype(float)
+            data_dfs[BENCHMARK_TICKER] = df_bench[['Date', 'Close']].copy()
+            print(f"    - Loaded benchmark {BENCHMARK_TICKER} with {len(df_bench)} rows.")
+    except Exception as e:
+        print(f"[!] Error downloading benchmark {BENCHMARK_TICKER}: {e}")
         
-    df = df.reset_index()
-    # Flatten columns if multi-indexed
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = [col[0] for col in df.columns]
+    # 2. Download 8 Stocks with graceful skipping
+    loaded_stocks = []
+    for ticker in STOCK_TICKERS:
+        try:
+            df_stock = yf.download(ticker, start="2010-01-01", end="2024-12-31")
+            if not df_stock.empty:
+                df_stock = df_stock.reset_index()
+                if isinstance(df_stock.columns, pd.MultiIndex):
+                    df_stock.columns = [col[0] for col in df_stock.columns]
+                df_stock['Date'] = pd.to_datetime(df_stock['Date'])
+                df_stock['Close'] = df_stock['Close'].astype(float)
+                data_dfs[ticker] = df_stock[['Date', 'Close']].copy()
+                loaded_stocks.append(ticker)
+                print(f"    - Loaded stock {ticker} with {len(df_stock)} rows.")
+            else:
+                print(f"[!] Warning: {ticker} returned empty dataset. Skipping.")
+        except Exception as e:
+            print(f"[!] Error downloading stock {ticker}: {e}. Skipping.")
+
+    if BENCHMARK_TICKER not in data_dfs:
+        raise ValueError("Critical: Failed to download Nifty 50 benchmark data.")
+    if len(loaded_stocks) == 0:
+        raise ValueError("Critical: Failed to download any of the 8 Indian stocks.")
+
+    # 3. Align all dataframes by doing an inner join on Date
+    merged_df = data_dfs[BENCHMARK_TICKER].rename(columns={'Close': 'Nifty50'})
+    for ticker in loaded_stocks:
+        temp_df = data_dfs[ticker][['Date', 'Close']].rename(columns={'Close': ticker})
+        merged_df = pd.merge(merged_df, temp_df, on='Date', how='inner')
         
-    df['Date'] = pd.to_datetime(df['Date'])
-    df['Close'] = df['Close'].astype(float)
-    
-    # 1. Feature Engineering
-    # Daily Log Return
-    df['log_ret'] = np.log(df['Close'] / df['Close'].shift(1))
-    
-    # Feature A: 21-day rolling volatility (annualized)
-    df['vol_21'] = df['log_ret'].rolling(window=21).std() * np.sqrt(252)
-    
-    # Feature B: 21-day mean return (annualized)
-    df['mean_ret_21'] = df['log_ret'].rolling(window=21).mean() * 252
-    
-    # Feature C: 63-day momentum (log return over 3 months)
-    df['mom_63'] = np.log(df['Close'] / df['Close'].shift(63))
-    
-    # Feature D: RSI-14
-    df['rsi_14'] = compute_rsi(df['Close'], window=14)
-    
-    # Feature E: 50-day / 200-day Moving Average Ratio
-    ma_50 = df['Close'].rolling(window=50).mean()
-    ma_200 = df['Close'].rolling(window=200).mean()
-    df['ma_50_200'] = ma_50 / ma_200
-    
-    # Drop rows containing NaNs
-    df_clean = df.dropna().reset_index(drop=True)
-    
-    # 2. Scaling
+    merged_df = merged_df.sort_values('Date').reset_index(drop=True)
+    print(f"[*] Aligned dataset contains {len(merged_df)} daily observations.")
+
+    # 4. Feature Engineering per Stock & Composite Averaging
+    stock_features = {}
+    for ticker in loaded_stocks:
+        prices = merged_df[ticker]
+        
+        # Calculate daily log return
+        log_ret = np.log(prices / prices.shift(1))
+        # 21-day rolling annualized volatility
+        vol_21 = log_ret.rolling(window=21).std() * np.sqrt(252)
+        # 21-day rolling annualized mean return
+        mean_ret_21 = log_ret.rolling(window=21).mean() * 252
+        # 63-day momentum (log return)
+        mom_63 = np.log(prices / prices.shift(63))
+        # RSI-14
+        rsi_14 = compute_rsi(prices, window=14)
+        # 50d/200d Moving Average Ratio
+        ma_50 = prices.rolling(window=50).mean()
+        ma_200 = prices.rolling(window=200).mean()
+        ma_50_200 = ma_50 / ma_200
+        
+        stock_features[ticker] = {
+            'log_ret': log_ret,
+            'vol_21': vol_21,
+            'mean_ret_21': mean_ret_21,
+            'mom_63': mom_63,
+            'rsi_14': rsi_14,
+            'ma_50_200': ma_50_200
+        }
+
+    # Average features across all successfully loaded stocks to form composite feature columns
     feature_cols = ['log_ret', 'vol_21', 'mean_ret_21', 'mom_63', 'rsi_14', 'ma_50_200']
+    for feat in feature_cols:
+        series_list = [stock_features[ticker][feat] for ticker in loaded_stocks]
+        merged_df[feat] = pd.concat(series_list, axis=1).mean(axis=1)
+
+    # 5. Handle Correlation Matrix (8x8 return correlation)
+    returns_df = merged_df[loaded_stocks].pct_change().dropna()
+    corr_matrix_raw = returns_df.corr().values  # 8x8 numpy array
+    short_labels = [SHORT_NAMES[t] for t in loaded_stocks]
+    
+    correlation_data = {
+        'matrix': corr_matrix_raw.tolist(),
+        'labels': short_labels
+    }
+
+    # Drop rows containing NaNs from feature calculation lookbacks
+    df_clean = merged_df.dropna().reset_index(drop=True)
+    
+    # 6. Scaling & Modeling
     X = df_clean[feature_cols].values
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
     
-    # 3. PCA Calculations
-    # Full PCA for explained variance ratios
+    # PCA
     pca_full = PCA()
     pca_full.fit(X_scaled)
     pca_var = pca_full.explained_variance_ratio_.tolist()
     
-    # 2-Component PCA for 2D visualization
     pca_2 = PCA(n_components=2)
     X_pca_2 = pca_2.fit_transform(X_scaled)
     df_clean['PC1'] = X_pca_2[:, 0]
     df_clean['PC2'] = X_pca_2[:, 1]
     
-    # 4. K-Means Elbow and Silhouette analysis (K=2 to 8)
+    # K-Means optimization (K=2 to 8)
     elbow_data = []
     for k in range(2, 9):
         km = KMeans(n_clusters=k, random_state=42, n_init=10)
@@ -111,92 +194,71 @@ def generate_regime_data():
             'silhouette': sil
         })
         
-    # 5. Forced K-Means (K=3) & Dynamic Mapping (ranked by annualized 21d mean return)
+    # Forced K-Means (K=3) & Dynamic Labeling (ranked by composite mean_ret_21)
     kmeans_3 = KMeans(n_clusters=3, random_state=42, n_init=10)
     kmeans_3.fit(X_scaled)
     labels_3 = kmeans_3.labels_
     
-    # Compute mean 21d return for each cluster to rank them:
-    # Lowest -> Bear (0), Middle -> Sideways (1), Highest -> Bull (2)
+    # Profile cluster returns
     cluster_returns = []
     for c in range(3):
         mask = (labels_3 == c)
         avg_ret = df_clean.loc[mask, 'mean_ret_21'].mean()
         cluster_returns.append((c, avg_ret))
-        
-    # Sort cluster indices based on average return ascending
+    
+    # Sort cluster indices ascending
     sorted_clusters = sorted(cluster_returns, key=lambda x: x[1])
     label_map = {
         sorted_clusters[0][0]: 0,  # Lowest return = Bear
         sorted_clusters[1][0]: 1,  # Middle return = Sideways
         sorted_clusters[2][0]: 2   # Highest return = Bull
     }
-    
-    # Assign sorted logical regimes
     df_clean['Regime'] = [label_map[l] for l in labels_3]
     
-    # 6. Overall Metrics (Silhouette, DB Index, PCA Explained)
+    # 7. Metrics
     final_regimes = df_clean['Regime'].values
     silhouette = float(silhouette_score(X_scaled, final_regimes))
     db_index = float(davies_bouldin_score(X_scaled, final_regimes))
     pc1_pct = float(pca_var[0] * 100)
     pc2_pct = float(pca_var[1] * 100)
     pc_cum_pct = pc1_pct + pc2_pct
+    total_days = len(df_clean)
     
     metrics = {
         'silhouette': silhouette,
         'db_index': db_index,
         'pc1_pct': pc1_pct,
-        'pc_cum_pct': pc_cum_pct
+        'pc_cum_pct': pc_cum_pct,
+        'total_days': int(total_days)
     }
-    
-    # 7. Ward Hierarchical Clustering on Monthly Resampled Data
+
+    # 8. Ward Hierarchical Clustering on Monthly Resampled Composite Data
     df_monthly = df_clean.set_index('Date').resample('ME').mean().reset_index()
     X_monthly = df_monthly[feature_cols].values
     X_monthly_scaled = StandardScaler().fit_transform(X_monthly)
     
-    # Ward Linkage matrix
+    # Ward Linkage
     linkage_matrix = sch.linkage(X_monthly_scaled, method='ward')
     
-    # Monthly Agglomerative Clustering
-    ac_monthly = AgglomerativeClustering(n_clusters=3, linkage='ward')
-    monthly_labels = ac_monthly.fit_predict(X_monthly_scaled)
-    
-    # Map monthly labels logically as well
-    monthly_returns = []
-    for c in range(3):
-        mask = (monthly_labels == c)
-        avg_ret = df_monthly.loc[mask, 'mean_ret_21'].mean()
-        monthly_returns.append((c, avg_ret))
-    sorted_monthly = sorted(monthly_returns, key=lambda x: x[1])
-    monthly_map = {
-        sorted_monthly[0][0]: 0,
-        sorted_monthly[1][0]: 1,
-        sorted_monthly[2][0]: 2
-    }
-    monthly_regimes = [monthly_map[l] for l in monthly_labels]
-    
-    hierarchical_data = {
-        'dates': df_monthly['Date'].dt.strftime('%Y-%m-%d').tolist(),
-        'prices': df_monthly['Close'].astype(float).round(2).tolist(),
-        'regimes': [int(l) for l in monthly_regimes],
-        'linkage': linkage_matrix.tolist()
-    }
-    
-    # 8. Slicing API outputs
-    # Every 5th row for daily price timeline
+    # 9. Format API Payload Outputs
+    # Every 5th row for Nifty 50 Timeline
     df_5th = df_clean.iloc[::5]
     price_data = []
     for _, row in df_5th.iterrows():
         price_data.append({
             'date': row['Date'].strftime('%Y-%m-%d'),
-            'price': float(row['Close']),
+            'price': float(row['Nifty50']),
             'regime': int(row['Regime']),
             'volatility': float(row['vol_21']),
             'rsi': float(row['rsi_14'])
         })
         
-    # 800-row sample for PCA scatter plot
+    # Stock Close prices every 5th row for stock comparison line chart
+    stock_data = {}
+    for ticker in loaded_stocks:
+        stock_data[ticker] = df_5th[ticker].astype(float).round(2).tolist()
+        
+    # PCA scatter 800 sample
     df_pca_sample = df_clean.sample(n=min(800, len(df_clean)), random_state=42).sort_index()
     pca_data = []
     for _, row in df_pca_sample.iterrows():
@@ -206,16 +268,15 @@ def generate_regime_data():
             'regime': int(row['Regime'])
         })
         
-    # Pie Chart distribution data
+    # Pie chart percentage shares
     regime_counts = df_clean['Regime'].value_counts()
-    total_days = len(df_clean)
     pie_data = {
         'bear': float((regime_counts.get(0, 0) / total_days) * 100),
         'sideways': float((regime_counts.get(1, 0) / total_days) * 100),
         'bull': float((regime_counts.get(2, 0) / total_days) * 100)
     }
     
-    # Summary Statistics Table data
+    # Stats table profiles
     summary_data = []
     names = {0: "Bear", 1: "Sideways", 2: "Bull"}
     for r in [0, 1, 2]:
@@ -225,7 +286,6 @@ def generate_regime_data():
         count = len(df_r)
         pct = (count / total_days) * 100
         
-        # Calculate stats
         avg_ret = df_r['mean_ret_21'].mean() * 100
         avg_vol = df_r['vol_21'].mean() * 100
         avg_rsi = df_r['rsi_14'].mean()
@@ -240,16 +300,17 @@ def generate_regime_data():
             'avg_rsi': float(avg_rsi)
         })
         
-    # Store everything in cache
+    # Compile the final data package
     _DATA_CACHE = {
         'price_data': price_data,
+        'stock_data': stock_data,
         'pca_data': pca_data,
         'pie_data': pie_data,
         'summary_data': summary_data,
         'elbow_data': elbow_data,
         'pca_var': pca_var,
+        'correlation_matrix': correlation_data,
         'metrics': metrics,
-        'hierarchical_data': hierarchical_data,
         'total_days': total_days
     }
     _CACHE_TIMESTAMP = time.time()
@@ -268,7 +329,7 @@ def get_data():
         if force_reload:
             _DATA_CACHE = None
             
-        data = generate_regime_data()
+        data = generate_multi_stock_regime_data()
         return jsonify(data)
     except Exception as e:
         import traceback
