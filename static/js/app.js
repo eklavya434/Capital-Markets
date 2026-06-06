@@ -2,120 +2,362 @@
  * Nifty 50 Market Regime Analytics Frontend Controller
  */
 
+// Global Chart instances to manage destruction and prevent memory/canvas reuse leaks
+let priceChartInst = null;
+let stockComparisonChartInst = null;
+let elbowChartInst = null;
+let silhouetteChartInst = null;
+let pcaScatterChartInst = null;
+let pcaVarianceChartInst = null;
+let doughnutChartInst = null;
+
+// Debouncer timer
+let debounceTimer = null;
+
+// Preset tickers list names map
+const PRESET_STOCK_NAMES = {
+    "RELIANCE.NS": "Reliance Industries",
+    "TCS.NS": "TCS",
+    "HDFCBANK.NS": "HDFC Bank",
+    "INFY.NS": "Infosys",
+    "ICICIBANK.NS": "ICICI Bank",
+    "WIPRO.NS": "Wipro",
+    "BAJFINANCE.NS": "Bajaj Finance",
+    "MARUTI.NS": "Maruti Suzuki"
+};
+
 document.addEventListener("DOMContentLoaded", () => {
-    // Fetch API Data from Flask endpoint
-    fetch("/api/data")
+    // Render stock selection checkboxes initially with default presets
+    renderStockCheckboxes(Object.keys(PRESET_STOCK_NAMES));
+
+    // Bind slider input events to update labels and trigger debounced server requests
+    const volWin = document.getElementById("volWin");
+    const retWin = document.getElementById("retWin");
+    const momWin = document.getElementById("momWin");
+    const rsiWin = document.getElementById("rsiWin");
+    const kNum = document.getElementById("kNum");
+
+    const volVal = document.getElementById("volVal");
+    const retVal = document.getElementById("retVal");
+    const momVal = document.getElementById("momVal");
+    const rsiVal = document.getElementById("rsiVal");
+    const kVal = document.getElementById("kVal");
+
+    volWin.addEventListener("input", () => { volVal.textContent = volWin.value + "d"; debouncedUpdate(); });
+    retWin.addEventListener("input", () => { retVal.textContent = retWin.value + "d"; debouncedUpdate(); });
+    momWin.addEventListener("input", () => { momVal.textContent = momWin.value + "d"; debouncedUpdate(); });
+    rsiWin.addEventListener("input", () => { rsiVal.textContent = rsiWin.value + "d"; debouncedUpdate(); });
+    kNum.addEventListener("input", () => { kVal.textContent = kNum.value; debouncedUpdate(); });
+
+    // Custom CSV File Upload
+    const fileInput = document.getElementById("csvUploadInput");
+    fileInput.addEventListener("change", () => {
+        const file = fileInput.files[0];
+        if (!file) return;
+
+        showFullPageLoading("PARSING & PROCESSING CUSTOM QUANT DATASETS...");
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        fetch("/api/upload", {
+            method: "POST",
+            body: formData
+        })
         .then(response => {
             if (!response.ok) {
-                throw new Error("Failed to load quant data from Flask API");
+                return response.json().then(err => { throw new Error(err.error || "Failed to upload file") });
             }
             return response.json();
         })
         .then(data => {
-            // Populate KPI values
-            document.getElementById("kpi-days").textContent = data.metrics.total_days.toLocaleString();
-            document.getElementById("kpi-silhouette").textContent = data.metrics.silhouette.toFixed(3);
-            document.getElementById("kpi-pc1").textContent = data.metrics.pc1_pct.toFixed(1) + "%";
-            document.getElementById("kpi-pccum").textContent = data.metrics.pc_cum_pct.toFixed(1) + "%";
+            if (data.success) {
+                document.getElementById("dataModeBadge").textContent = "Custom Dataset Active";
+                document.getElementById("resetBtn").style.display = "inline-block";
 
-            // Render all dashboard charts
-            renderPriceChart(data.price_data);
-            renderStockComparisonChart(data.price_data, data.stock_data);
-            drawCorrelationHeatmap(data.correlation_matrix);
-            renderElbowAndSilhouette(data.elbow_data);
-            renderPCACharts(data.pca_data, data.pca_var);
-            renderBreakdown(data.pie_data, data.summary_data);
+                // Re-render checkboxes with custom stock columns
+                renderStockCheckboxes(data.stocks);
 
-            // Initialize scroll animations
-            initScrollAnimations();
-
-            // Dismiss Loading Screen
-            const loader = document.getElementById("loadingScreen");
-            loader.classList.add("fade-out");
-            setTimeout(() => loader.remove(), 500);
+                // Fetch data for custom dataset
+                updateDashboard();
+            }
         })
         .catch(error => {
-            console.error("Error loading dashboard data:", error);
-            const loaderText = document.querySelector(".loading-text");
-            if (loaderText) {
-                loaderText.textContent = "ERROR LOADING QUANT DATA: " + error.message;
-                loaderText.style.color = "#ef4444";
-            }
+            console.error("Upload error:", error);
+            hideFullPageLoading();
+            alert("Upload failed: " + error.message);
         });
+    });
+
+    // Reset button to presets
+    const resetBtn = document.getElementById("resetBtn");
+    resetBtn.addEventListener("click", () => {
+        showFullPageLoading("RESTORING DEFAULT NIFTY 50 & 8 BLUECHIP PRESETS...");
+
+        fetch("/api/data?reset=true")
+            .then(response => response.json())
+            .then(data => {
+                resetBtn.style.display = "none";
+                document.getElementById("dataModeBadge").textContent = "Default Presets Active";
+                fileInput.value = "";
+
+                // Restore default stock selection checkboxes
+                renderStockCheckboxes(Object.keys(PRESET_STOCK_NAMES));
+
+                // Populate data
+                processDashboardData(data);
+                hideFullPageLoading();
+            })
+            .catch(error => {
+                console.error("Reset error:", error);
+                hideFullPageLoading();
+                alert("Reset failed: " + error.message);
+            });
+    });
+
+    // Initial load
+    updateDashboard(true); // pass true for initial page load
 });
 
 /**
- * 1. SECTION 1: PRICE TIMELINE (Regime Colored Segments)
+ * Renders checkboxes inside sidebar dynamically
  */
-function renderPriceChart(priceData) {
+function renderStockCheckboxes(stocks, checkedStates = {}) {
+    const container = document.querySelector("#stockSelectionGroup > div");
+    if (!container) return;
+    container.innerHTML = "";
+
+    stocks.forEach(ticker => {
+        const label = document.createElement("label");
+        label.style.display = "flex";
+        label.style.alignItems = "center";
+        label.style.gap = "0.5rem";
+        label.style.cursor = "pointer";
+
+        const isChecked = checkedStates[ticker] !== false;
+
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.className = "stock-chk";
+        input.value = ticker;
+        input.checked = isChecked;
+
+        input.addEventListener("change", () => {
+            const checkedCount = document.querySelectorAll(".stock-chk:checked").length;
+            if (checkedCount === 0) {
+                input.checked = true;
+                alert("At least one asset must be selected for analysis.");
+                return;
+            }
+            updateDashboard();
+        });
+
+        const name = PRESET_STOCK_NAMES[ticker] || ticker;
+        label.appendChild(input);
+        label.appendChild(document.createTextNode(` ${name}`));
+        container.appendChild(label);
+    });
+}
+
+/**
+ * Debounce function to limit query spam
+ */
+function debouncedUpdate() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(updateDashboard, 250);
+}
+
+/**
+ * Returns a list of checked stock values
+ */
+function getSelectedStocks() {
+    const chks = document.querySelectorAll(".stock-chk");
+    const selected = [];
+    chks.forEach(chk => {
+        if (chk.checked) {
+            selected.push(chk.value);
+        }
+    });
+    return selected.join(",");
+}
+
+/**
+ * Get color for a specific regime index
+ */
+function getRegimeColor(c, k) {
+    if (c === 0) return '#ef4444'; // Bear is always Red
+    if (c === k - 1) return '#22c55e'; // Bull is always Green
+    if (k === 3 && c === 1) return '#f59e0b'; // Sideways is Amber
+
+    // Smooth gradient color mapping for other K levels
+    const midColors = ['#f59e0b', '#3b82f6', '#8b5cf6', '#06b6d4', '#ec4899', '#eab308'];
+    return midColors[(c - 1) % midColors.length];
+}
+
+/**
+ * Get human-readable regime state label
+ */
+function getRegimeName(c, k) {
+    if (c === 0) return 'Bear Market';
+    if (c === k - 1) return 'Bull Market';
+    if (k === 3 && c === 1) return 'Sideways Market';
+    return `Regime ${c}`;
+}
+
+/**
+ * Dynamic dashboard refresh function
+ */
+function updateDashboard(isInitial = false) {
+    const k = document.getElementById("kNum").value;
+    const vol_win = document.getElementById("volWin").value;
+    const ret_win = document.getElementById("retWin").value;
+    const mom_win = document.getElementById("momWin").value;
+    const rsi_win = document.getElementById("rsiWin").value;
+    const stocks = getSelectedStocks();
+
+    const contentArea = document.querySelector(".content-area");
+    if (contentArea && !isInitial) {
+        contentArea.style.opacity = "0.5";
+    }
+
+    const url = `/api/data?k=${k}&vol_win=${vol_win}&ret_win=${ret_win}&mom_win=${mom_win}&rsi_win=${rsi_win}&stocks=${stocks}`;
+
+    fetch(url)
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => { throw new Error(err.error || "Quant calculation error") });
+            }
+            return response.json();
+        })
+        .then(data => {
+            processDashboardData(data);
+            if (contentArea) contentArea.style.opacity = "1.0";
+
+            if (isInitial) {
+                // Fade out initial loading overlay
+                hideFullPageLoading();
+                initScrollAnimations();
+            }
+        })
+        .catch(error => {
+            console.error("Dashboard update failed:", error);
+            if (contentArea) contentArea.style.opacity = "1.0";
+            hideFullPageLoading();
+            alert("Error running regime model: " + error.message);
+        });
+}
+
+/**
+ * Processes incoming JSON data and refreshes all UI elements
+ */
+function processDashboardData(data) {
+    if (data.error) {
+        alert("Server calculation error: " + data.error);
+        return;
+    }
+
+    // 1. Populate KPI Strip metrics
+    document.getElementById("kpi-days").textContent = data.metrics.total_days.toLocaleString();
+    
+    const k = parseInt(document.getElementById("kNum").value);
+    document.getElementById("silhouetteLabel").textContent = `Silhouette Score (K=${k})`;
+    document.getElementById("kpi-silhouette").textContent = data.metrics.silhouette.toFixed(3);
+    document.getElementById("kpi-pc1").textContent = data.metrics.pc1_pct.toFixed(1) + "%";
+    document.getElementById("kpi-pccum").textContent = data.metrics.pc_cum_pct.toFixed(1) + "%";
+
+    // 2. Update Dynamic Stock Badges
+    const badgesContainer = document.getElementById("tickerBadges");
+    if (badgesContainer) {
+        badgesContainer.innerHTML = "";
+        Object.keys(data.stock_data).forEach((ticker, index) => {
+            const badge = document.createElement("span");
+            badge.className = "ticker-badge";
+            badge.setAttribute("data-ticker", ticker);
+            const name = data.correlation_matrix.labels[index] || ticker;
+            badge.textContent = `${name} (${ticker})`;
+            badgesContainer.appendChild(badge);
+        });
+    }
+
+    // 3. Dynamic Title configurations based on data active presets/custom
+    const isCustom = document.getElementById("dataModeBadge").textContent.includes("Custom");
+    document.getElementById("priceChartTitle").textContent = isCustom
+        ? "Custom Index Close Price Overlayed with Composite Market Regimes"
+        : "Nifty 50 Index Close Price Overlayed with Composite Market Regimes";
+
+    document.getElementById("stockComparisonChartTitle").textContent = isCustom
+        ? "Custom Asset Portfolio Normalized to 100 at Start Date"
+        : "Blue-Chip Stock Portfolio Normalized to 100 at Start Date";
+
+    // 4. Render and update the components
+    renderPriceChart(data.price_data, k);
+    renderStockComparisonChart(data.price_data, data.stock_data, data.correlation_matrix.labels);
+    drawCorrelationHeatmap(data.correlation_matrix);
+    renderElbowAndSilhouette(data.elbow_data, k);
+    renderPCACharts(data.pca_data, data.pca_var, k);
+    renderBreakdown(data.summary_data, k);
+}
+
+/**
+ * Full page loading screen utilities
+ */
+function showFullPageLoading(text) {
+    const loader = document.getElementById("loadingScreen");
+    if (loader) {
+        const loadingText = loader.querySelector(".loading-text");
+        if (loadingText) loadingText.textContent = text;
+        loader.classList.remove("fade-out");
+    }
+}
+
+function hideFullPageLoading() {
+    const loader = document.getElementById("loadingScreen");
+    if (loader) {
+        loader.classList.add("fade-out");
+    }
+}
+
+/**
+ * 1. Price Timeline Regime Colored Line Chart
+ */
+function renderPriceChart(priceData, k) {
     const dates = priceData.map(d => d.date);
     const prices = priceData.map(d => d.price);
     const regimes = priceData.map(d => d.regime);
 
-    const bearPrices = [];
-    const sidewaysPrices = [];
-    const bullPrices = [];
-
-    for (let i = 0; i < prices.length; i++) {
-        const r = regimes[i];
-        const p = prices[i];
-
-        // Bear (0)
-        if (r === 0 || (i > 0 && regimes[i - 1] === 0)) {
-            bearPrices.push(p);
-        } else {
-            bearPrices.push(null);
+    const datasets = [];
+    for (let c = 0; c < k; c++) {
+        const regimePrices = [];
+        for (let i = 0; i < prices.length; i++) {
+            const r = regimes[i];
+            const p = prices[i];
+            if (r === c || (i > 0 && regimes[i - 1] === c)) {
+                regimePrices.push(p);
+            } else {
+                regimePrices.push(null);
+            }
         }
 
-        // Sideways (1)
-        if (r === 1 || (i > 0 && regimes[i - 1] === 1)) {
-            sidewaysPrices.push(p);
-        } else {
-            sidewaysPrices.push(null);
-        }
-
-        // Bull (2)
-        if (r === 2 || (i > 0 && regimes[i - 1] === 2)) {
-            bullPrices.push(p);
-        } else {
-            bullPrices.push(null);
-        }
+        datasets.push({
+            label: getRegimeName(c, k),
+            data: regimePrices,
+            borderColor: getRegimeColor(c, k),
+            borderWidth: 2,
+            pointRadius: 0,
+            spanGaps: false,
+            fill: false
+        });
     }
 
     const ctx = document.getElementById("priceChart").getContext("2d");
-    new Chart(ctx, {
+    if (priceChartInst) {
+        priceChartInst.destroy();
+    }
+    priceChartInst = new Chart(ctx, {
         type: 'line',
         data: {
             labels: dates,
-            datasets: [
-                {
-                    label: 'Bear Market',
-                    data: bearPrices,
-                    borderColor: '#ef4444',
-                    borderWidth: 2,
-                    pointRadius: 0,
-                    spanGaps: false,
-                    fill: false
-                },
-                {
-                    label: 'Sideways Market',
-                    data: sidewaysPrices,
-                    borderColor: '#f59e0b',
-                    borderWidth: 2,
-                    pointRadius: 0,
-                    spanGaps: false,
-                    fill: false
-                },
-                {
-                    label: 'Bull Market',
-                    data: bullPrices,
-                    borderColor: '#22c55e',
-                    borderWidth: 2,
-                    pointRadius: 0,
-                    spanGaps: false,
-                    fill: false
-                }
-            ]
+            datasets: datasets
         },
         options: {
             responsive: true,
@@ -161,44 +403,25 @@ function renderPriceChart(priceData) {
 }
 
 /**
- * 2. SECTION 2: MULTI-LINE STOCK COMPARISON CHART (Normalized to 100)
+ * 2. Multi-line stock comparison chart (Normalized to 100)
  */
-function renderStockComparisonChart(priceData, stockData) {
+function renderStockComparisonChart(priceData, stockData, labels) {
     const dates = priceData.map(d => d.date);
-    
-    // Distinct colors for the 8 stocks
     const colors = [
-        '#3b82f6', // Reliance (Blue)
-        '#10b981', // TCS (Green)
-        '#ef4444', // HDFC Bank (Red)
-        '#f59e0b', // Infosys (Amber)
-        '#8b5cf6', // ICICI Bank (Purple)
-        '#ec4899', // Wipro (Pink)
-        '#06b6d4', // Bajaj Finance (Cyan)
-        '#e2e8f0'  // Maruti Suzuki (White)
+        '#3b82f6', '#10b981', '#ef4444', '#f59e0b',
+        '#8b5cf6', '#ec4899', '#06b6d4', '#e2e8f0',
+        '#f43f5e', '#10b981', '#84cc16'
     ];
-
-    const shortNames = {
-        "RELIANCE.NS": "Reliance",
-        "TCS.NS": "TCS",
-        "HDFCBANK.NS": "HDFC Bank",
-        "INFY.NS": "Infosys",
-        "ICICIBANK.NS": "ICICI Bank",
-        "WIPRO.NS": "Wipro",
-        "BAJFINANCE.NS": "Bajaj Fin",
-        "MARUTI.NS": "Maruti"
-    };
 
     const datasets = Object.keys(stockData).map((ticker, index) => {
         const prices = stockData[ticker];
         const startPrice = prices[0];
-        
-        // Normalize: Price_t / Price_0 * 100
         const normalizedPrices = prices.map(p => startPrice === 0 ? 0 : (p / startPrice) * 100);
         const color = colors[index % colors.length];
+        const label = labels[index] || ticker;
 
         return {
-            label: shortNames[ticker] || ticker,
+            label: label,
             data: normalizedPrices,
             borderColor: color,
             borderWidth: 1.8,
@@ -209,7 +432,10 @@ function renderStockComparisonChart(priceData, stockData) {
     });
 
     const ctx = document.getElementById("stockComparisonChart").getContext("2d");
-    new Chart(ctx, {
+    if (stockComparisonChartInst) {
+        stockComparisonChartInst.destroy();
+    }
+    stockComparisonChartInst = new Chart(ctx, {
         type: 'line',
         data: {
             labels: dates,
@@ -270,7 +496,7 @@ function renderStockComparisonChart(priceData, stockData) {
 }
 
 /**
- * 3. SECTION 3: PAIRWISE CORRELATION HEATMAP (Canvas Element)
+ * 3. Pairwise Asset Correlation Heatmap drawn on HTML5 Canvas
  */
 function drawCorrelationHeatmap(correlationData) {
     const canvas = document.getElementById("heatmapCanvas");
@@ -281,7 +507,6 @@ function drawCorrelationHeatmap(correlationData) {
     const labels = correlationData.labels;
     const n = matrix.length;
 
-    // Dimensions
     const width = canvas.width;
     const height = canvas.height;
     const paddingLeft = 85;
@@ -293,19 +518,15 @@ function drawCorrelationHeatmap(correlationData) {
     const plotHeight = height - paddingTop - paddingBottom;
     const cellSize = plotWidth / n;
 
-    // Clear Canvas
     ctx.clearRect(0, 0, width, height);
 
-    // Diverging Color scale: Blue (Negative) -> Slate (Neutral) -> Red (Positive)
     function getColor(v) {
         let r, g, b;
         if (v >= 0) {
-            // Interpolate between Slate background (30, 41, 59) and Red (239, 68, 68)
             r = Math.round(30 + v * (239 - 30));
             g = Math.round(41 + v * (68 - 41));
             b = Math.round(59 + v * (68 - 59));
         } else {
-            // Interpolate between Slate (30, 41, 59) and Blue (59, 130, 246)
             const absV = Math.abs(v);
             r = Math.round(30 + absV * (59 - 30));
             g = Math.round(41 + absV * (130 - 41));
@@ -314,7 +535,6 @@ function drawCorrelationHeatmap(correlationData) {
         return `rgb(${r}, ${g}, ${b})`;
     }
 
-    // Draw grid cells and correlation values
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.font = "bold 9px 'DM Mono', monospace";
@@ -325,50 +545,45 @@ function drawCorrelationHeatmap(correlationData) {
             const cellX = paddingLeft + j * cellSize;
             const cellY = paddingTop + i * cellSize;
 
-            // Draw box
             ctx.fillStyle = getColor(val);
             ctx.fillRect(cellX, cellY, cellSize - 1, cellSize - 1);
 
-            // Draw number inside
             ctx.fillStyle = "#ffffff";
             ctx.fillText(val.toFixed(2), cellX + cellSize / 2, cellY + cellSize / 2);
         }
     }
 
-    // Draw labels
     ctx.fillStyle = "#94a3b8";
     ctx.font = "500 10px 'Outfit', sans-serif";
 
-    // Y-axis labels (row names)
     ctx.textAlign = "right";
     for (let i = 0; i < n; i++) {
         const labelY = paddingTop + i * cellSize + cellSize / 2;
         ctx.fillText(labels[i], paddingLeft - 10, labelY);
     }
 
-    // X-axis labels (col names, tilted 45 degrees)
     ctx.textAlign = "left";
     for (let j = 0; j < n; j++) {
         const labelX = paddingLeft + j * cellSize + cellSize / 2;
         ctx.save();
         ctx.translate(labelX, height - paddingBottom + 10);
-        ctx.rotate(Math.PI / 4); // 45 degrees rotation
+        ctx.rotate(Math.PI / 4);
         ctx.fillText(labels[j], 0, 0);
         ctx.restore();
     }
 }
 
 /**
- * 5. SECTION 5: ELBOW + SILHOUETTE OPTIMIZATION
+ * 4. Elbow & Silhouette Cluster Optimization Charts
  */
-function renderElbowAndSilhouette(elbowData) {
+function renderElbowAndSilhouette(elbowData, currentK) {
     const kVals = elbowData.map(d => d.k);
     const inertias = elbowData.map(d => d.inertia);
     const silhouettes = elbowData.map(d => d.silhouette);
 
-    // Elbow Chart
     const ctxElbow = document.getElementById("elbowChart").getContext("2d");
-    new Chart(ctxElbow, {
+    if (elbowChartInst) elbowChartInst.destroy();
+    elbowChartInst = new Chart(ctxElbow, {
         type: 'line',
         data: {
             labels: kVals,
@@ -379,7 +594,7 @@ function renderElbowAndSilhouette(elbowData) {
                 borderWidth: 2,
                 backgroundColor: 'rgba(59, 130, 246, 0.2)',
                 pointRadius: 5,
-                pointBackgroundColor: '#3b82f6',
+                pointBackgroundColor: kVals.map(k => k === currentK ? '#22c55e' : '#3b82f6'),
                 fill: false
             }]
         },
@@ -402,17 +617,17 @@ function renderElbowAndSilhouette(elbowData) {
         }
     });
 
-    // Silhouette Chart
     const ctxSil = document.getElementById("silhouetteChart").getContext("2d");
-    new Chart(ctxSil, {
+    if (silhouetteChartInst) silhouetteChartInst.destroy();
+    silhouetteChartInst = new Chart(ctxSil, {
         type: 'bar',
         data: {
             labels: kVals,
             datasets: [{
                 label: 'Silhouette Score',
                 data: silhouettes,
-                backgroundColor: kVals.map(k => k === 3 ? '#22c55e' : 'rgba(59, 130, 246, 0.3)'),
-                borderColor: kVals.map(k => k === 3 ? '#22c55e' : '#3b82f6'),
+                backgroundColor: kVals.map(k => k === currentK ? '#22c55e' : 'rgba(59, 130, 246, 0.3)'),
+                borderColor: kVals.map(k => k === currentK ? '#22c55e' : '#3b82f6'),
                 borderWidth: 1,
                 borderRadius: 4
             }]
@@ -438,30 +653,37 @@ function renderElbowAndSilhouette(elbowData) {
 }
 
 /**
- * 6. SECTION 6: PCA SCATTER + EXPLAINED VARIANCE
+ * 5. PCA Projection Scatter and Variance Explained Combo Chart
  */
-function renderPCACharts(pcaData, pcaVar) {
-    const bearPoints = [];
-    const sidewaysPoints = [];
-    const bullPoints = [];
+function renderPCACharts(pcaData, pcaVar, k) {
+    const groups = {};
+    for (let c = 0; c < k; c++) {
+        groups[c] = [];
+    }
 
     pcaData.forEach(pt => {
         const pObj = { x: pt.pc1, y: pt.pc2 };
-        if (pt.regime === 0) bearPoints.push(pObj);
-        else if (pt.regime === 1) sidewaysPoints.push(pObj);
-        else if (pt.regime === 2) bullPoints.push(pObj);
+        if (groups[pt.regime] !== undefined) {
+            groups[pt.regime].push(pObj);
+        }
     });
 
-    // PCA 2D Scatter
+    const datasets = [];
+    for (let c = 0; c < k; c++) {
+        datasets.push({
+            label: getRegimeName(c, k) + ' Cluster',
+            data: groups[c],
+            backgroundColor: getRegimeColor(c, k),
+            pointRadius: 4
+        });
+    }
+
     const ctxScatter = document.getElementById("pcaScatterChart").getContext("2d");
-    new Chart(ctxScatter, {
+    if (pcaScatterChartInst) pcaScatterChartInst.destroy();
+    pcaScatterChartInst = new Chart(ctxScatter, {
         type: 'scatter',
         data: {
-            datasets: [
-                { label: 'Bear Cluster', data: bearPoints, backgroundColor: '#ef4444', pointRadius: 4 },
-                { label: 'Sideways Cluster', data: sidewaysPoints, backgroundColor: '#f59e0b', pointRadius: 4 },
-                { label: 'Bull Cluster', data: bullPoints, backgroundColor: '#22c55e', pointRadius: 4 }
-            ]
+            datasets: datasets
         },
         options: {
             responsive: true,
@@ -484,7 +706,6 @@ function renderPCACharts(pcaData, pcaVar) {
         }
     });
 
-    // PCA Explained Variance Combo (Bar + Line)
     const pcLabels = ['PC1', 'PC2', 'PC3', 'PC4', 'PC5', 'PC6'];
     const indVars = pcaVar.map(v => v * 100);
     const cumVars = [];
@@ -495,7 +716,8 @@ function renderPCACharts(pcaData, pcaVar) {
     });
 
     const ctxVariance = document.getElementById("pcaVarianceChart").getContext("2d");
-    new Chart(ctxVariance, {
+    if (pcaVarianceChartInst) pcaVarianceChartInst.destroy();
+    pcaVarianceChartInst = new Chart(ctxVariance, {
         type: 'bar',
         data: {
             labels: pcLabels,
@@ -555,18 +777,22 @@ function renderPCACharts(pcaData, pcaVar) {
 }
 
 /**
- * 7. SECTION 7: DOUGHNUT + SUMMARY STATS TABLE
+ * 6. Regime Shares Doughnut and Performance Summary Profile Table
  */
-function renderBreakdown(pieData, summaryData) {
-    // Doughnut
+function renderBreakdown(summaryData, k) {
+    const labels = summaryData.map(row => `${row.name} Regime`);
+    const data = summaryData.map(row => row.pct);
+    const backgroundColors = summaryData.map(row => getRegimeColor(row.regime, k));
+
     const ctxPie = document.getElementById("doughnutChart").getContext("2d");
-    new Chart(ctxPie, {
+    if (doughnutChartInst) doughnutChartInst.destroy();
+    doughnutChartInst = new Chart(ctxPie, {
         type: 'doughnut',
         data: {
-            labels: ['Bear Regime', 'Sideways Regime', 'Bull Regime'],
+            labels: labels,
             datasets: [{
-                data: [pieData.bear, pieData.sideways, pieData.bull],
-                backgroundColor: ['#ef4444', '#f59e0b', '#22c55e'],
+                data: data,
+                backgroundColor: backgroundColors,
                 borderWidth: 1,
                 borderColor: '#050d1a'
             }]
@@ -584,7 +810,6 @@ function renderBreakdown(pieData, summaryData) {
         }
     });
 
-    // Summary Stats Table
     const tbody = document.getElementById("summaryTable").querySelector("tbody");
     tbody.innerHTML = "";
 
@@ -592,8 +817,8 @@ function renderBreakdown(pieData, summaryData) {
         const tr = document.createElement("tr");
         let badgeClass = "pill ";
         if (row.regime === 0) badgeClass += "bear";
-        else if (row.regime === 1) badgeClass += "sideways";
-        else badgeClass += "bull";
+        else if (row.regime === k - 1) badgeClass += "bull";
+        else badgeClass += "sideways";
 
         tr.innerHTML = `
             <td><span class="${badgeClass}">${row.name}</span></td>
@@ -610,7 +835,7 @@ function renderBreakdown(pieData, summaryData) {
 }
 
 /**
- * IntersectionObserver setup for Scroll Animations
+ * IntersectionObserver Scroll Animation setup
  */
 function initScrollAnimations() {
     const sections = document.querySelectorAll(".fade-in-section");

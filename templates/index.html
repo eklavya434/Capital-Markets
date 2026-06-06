@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multi-Asset Market Regime Dynamics | Indian Equities</title>
+    <title>Dynamic Multi-Asset Market Regime Dynamics | Indian Equities</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -23,199 +23,305 @@
             <h1 class="brand-title">Indian Equity Regime Analytics</h1>
         </div>
         <div class="nav-links">
-            <span class="nav-badge">Composite Analysis</span>
-            <span class="nav-badge">Period: 2010 - 2024</span>
+            <span class="nav-badge" id="dataModeBadge">Default Presets Active</span>
+            <button class="nav-badge" id="resetBtn" style="cursor: pointer; background: rgba(239, 68, 68, 0.1); color: #ef4444; border-color: rgba(239, 68, 68, 0.2); display: none;">Reset to Presets</button>
         </div>
     </nav>
 
-    <!-- Main Dashboard Container -->
-    <main class="dashboard-container">
+    <!-- Main Grid Layout -->
+    <div class="main-layout" style="display: grid; grid-template-columns: 320px 1fr; min-height: calc(100vh - 70px);">
         
-        <!-- SECTION 1: HERO & STOCK TICKER BADGES & KPI STRIP -->
-        <section id="section-hero" class="fade-in-section">
-            <div class="card" style="background: linear-gradient(135deg, rgba(10, 20, 38, 0.9) 0%, rgba(5, 13, 26, 0.95) 100%); border-left: 4px solid var(--accent);">
-                <span class="kpi-label" style="color: var(--accent); font-size: 0.8rem; margin-bottom: 0.5rem; display: block;">Indian Blue-Chip Equities Under Analysis</span>
-                <div class="ticker-badges-container" id="tickerBadges">
-                    <span class="ticker-badge">Reliance (RELIANCE.NS)</span>
-                    <span class="ticker-badge">TCS (TCS.NS)</span>
-                    <span class="ticker-badge">HDFC Bank (HDFCBANK.NS)</span>
-                    <span class="ticker-badge">Infosys (INFY.NS)</span>
-                    <span class="ticker-badge">ICICI Bank (ICICIBANK.NS)</span>
-                    <span class="ticker-badge">Wipro (WIPRO.NS)</span>
-                    <span class="ticker-badge">Bajaj Finance (BAJFINANCE.NS)</span>
-                    <span class="ticker-badge">Maruti Suzuki (MARUTI.NS)</span>
+        <!-- Sidebar Controls Panel -->
+        <aside class="sidebar" style="background-color: rgba(10, 20, 38, 0.4); border-right: 1px solid var(--border-color); padding: 2rem 1.5rem; display: flex; flex-direction: column; gap: 2rem; overflow-y: auto; height: calc(100vh - 70px); position: sticky; top: 70px; z-index: 10;">
+            
+            <!-- Asset Selection -->
+            <div id="stockSelectionGroup">
+                <h3 class="kpi-label" style="color: var(--accent); margin-bottom: 0.75rem;">Asset Portfolio</h3>
+                <div style="display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.85rem; color: var(--text-secondary);">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" class="stock-chk" value="RELIANCE.NS" checked> Reliance Industries
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" class="stock-chk" value="TCS.NS" checked> TCS
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" class="stock-chk" value="HDFCBANK.NS" checked> HDFC Bank
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" class="stock-chk" value="INFY.NS" checked> Infosys
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" class="stock-chk" value="ICICIBANK.NS" checked> ICICI Bank
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" class="stock-chk" value="WIPRO.NS" checked> Wipro
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" class="stock-chk" value="BAJFINANCE.NS" checked> Bajaj Finance
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" class="stock-chk" value="MARUTI.NS" checked> Maruti Suzuki
+                    </label>
                 </div>
             </div>
 
-            <!-- KPI Analytics Strip -->
-            <div class="kpi-strip">
-                <div class="kpi-card">
-                    <span class="kpi-label">Market Observations (Days)</span>
-                    <span class="kpi-value" id="kpi-days">--</span>
-                </div>
-                <div class="kpi-card">
-                    <span class="kpi-label">Silhouette Score (K=3)</span>
-                    <span class="kpi-value" id="kpi-silhouette">--</span>
-                </div>
-                <div class="kpi-card">
-                    <span class="kpi-label">PC1 Var Explained</span>
-                    <span class="kpi-value" id="kpi-pc1">--</span>
-                </div>
-                <div class="kpi-card">
-                    <span class="kpi-label">Cumulative 2D Var (PC1+PC2)</span>
-                    <span class="kpi-value" id="kpi-pccum">--</span>
+            <!-- Parameters Sliders -->
+            <div>
+                <h3 class="kpi-label" style="color: var(--accent); margin-bottom: 1rem;">Model Parameters</h3>
+                <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+                    
+                    <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+                        <label style="font-size: 0.85rem; color: var(--text-secondary); display: flex; justify-content: space-between;">
+                            <span>Volatility Window</span>
+                            <span id="volVal" style="color: var(--accent); font-family: var(--font-mono); font-weight: bold;">21d</span>
+                        </label>
+                        <input type="range" id="volWin" min="5" max="60" value="21" style="width: 100%;">
+                    </div>
+                    
+                    <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+                        <label style="font-size: 0.85rem; color: var(--text-secondary); display: flex; justify-content: space-between;">
+                            <span>Mean Return Window</span>
+                            <span id="retVal" style="color: var(--accent); font-family: var(--font-mono); font-weight: bold;">21d</span>
+                        </label>
+                        <input type="range" id="retWin" min="5" max="60" value="21" style="width: 100%;">
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+                        <label style="font-size: 0.85rem; color: var(--text-secondary); display: flex; justify-content: space-between;">
+                            <span>Momentum Window</span>
+                            <span id="momVal" style="color: var(--accent); font-family: var(--font-mono); font-weight: bold;">63d</span>
+                        </label>
+                        <input type="range" id="momWin" min="20" max="120" value="63" style="width: 100%;">
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+                        <label style="font-size: 0.85rem; color: var(--text-secondary); display: flex; justify-content: space-between;">
+                            <span>RSI Lookback</span>
+                            <span id="rsiVal" style="color: var(--accent); font-family: var(--font-mono); font-weight: bold;">14d</span>
+                        </label>
+                        <input type="range" id="rsiWin" min="5" max="30" value="14" style="width: 100%;">
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; gap: 0.4rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                        <label style="font-size: 0.85rem; color: var(--text-secondary); display: flex; justify-content: space-between;">
+                            <span>Regimes Count (K)</span>
+                            <span id="kVal" style="color: var(--bull); font-family: var(--font-mono); font-weight: bold;">3</span>
+                        </label>
+                        <input type="range" id="kNum" min="2" max="8" value="3" style="width: 100%;">
+                    </div>
+
                 </div>
             </div>
-        </section>
 
-        <!-- SECTION 2: REGIME COLORED BENCHMARK PRICE TIMELINE -->
-        <section id="section-price" class="fade-in-section">
-            <h2 class="section-header">1. Market Benchmark & Regime Timeline</h2>
-            <div class="card">
-                <div class="card-title">
-                    <span>Nifty 50 Index Close Price Overlayed with Composite Market Regimes</span>
-                    <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: normal;">Every 5th trading day plotted | Segments connected</span>
+            <!-- Drag-and-Drop CSV Uploader -->
+            <div>
+                <h3 class="kpi-label" style="color: var(--accent); margin-bottom: 0.75rem;">Upload Custom CSV</h3>
+                <div style="position: relative; width: 100%;">
+                    <label for="csvUploadInput" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; background: rgba(59, 130, 246, 0.03); border: 1px dashed rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 1.25rem 0.5rem; color: var(--accent); font-size: 0.8rem; cursor: pointer; text-align: center; transition: all 0.2s;">
+                        <svg width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                            <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"/>
+                        </svg>
+                        <span>Choose custom CSV file</span>
+                    </label>
+                    <input type="file" id="csvUploadInput" accept=".csv" style="position: absolute; left: 0; top: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer;">
                 </div>
-                <div class="chart-wrapper chart-wrapper-tall">
-                    <canvas id="priceChart"></canvas>
-                </div>
+                <p style="font-size: 0.68rem; color: var(--text-secondary); margin-top: 0.5rem; line-height: 1.3;">
+                    Expects Date and Stock price columns. Single asset or multi-column formats supported.
+                </p>
             </div>
-        </section>
 
-        <!-- SECTION 3: MULTI-LINE STOCK COMPARISON CHART -->
-        <section id="section-comparison" class="fade-in-section">
-            <h2 class="section-header">2. Relative Blue-Chip Performance</h2>
-            <div class="card">
-                <div class="card-title">
-                    <span>8 Major Indian Stocks Normalized to 100 at Start Date (2010)</span>
-                    <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: normal;">Click legend to toggle stocks | Scroll/hover to compare</span>
-                </div>
-                <div class="chart-wrapper chart-wrapper-tall">
-                    <canvas id="stockComparisonChart"></canvas>
-                </div>
-            </div>
-        </section>
+        </aside>
 
-        <!-- SECTION 4: 8x8 CORRELATION HEATMAP (Canvas Element) -->
-        <section id="section-heatmap" class="fade-in-section">
-            <h2 class="section-header">3. Pairwise Asset Correlation Heatmap</h2>
-            <div class="grid-2" style="grid-template-columns: 1fr 1fr; align-items: center;">
-                <div class="card" style="display: flex; justify-content: center; align-items: center; padding: 2rem;">
-                    <!-- Custom Heatmap Drawing Canvas -->
-                    <canvas id="heatmapCanvas" width="480" height="480" style="max-width: 100%; height: auto; display: block; background: transparent;"></canvas>
-                </div>
-                <div class="card" style="height: 100%; display: flex; flex-direction: column; justify-content: center; gap: 1.25rem;">
-                    <div class="card-title" style="border: none; margin-bottom: 0; padding: 0;">Statistical Correlation Insights</div>
-                    <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6;">
-                        This heatmap is rendered directly on a canvas element using a **blue-to-red diverging color scale**. 
-                        Values close to <b style="color: #ef4444;">+1.0 (Dark Red)</b> represent strong positive correlation in daily returns, while values near <b style="color: #3b82f6;">-1.0 (Dark Blue)</b> indicate negative correlation.
-                    </p>
-                    <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6;">
-                        As visible, large-cap Indian equities exhibit high positive correlation (typically $0.4 - 0.7$) to each other and the market index, confirming structural asset-class co-movements. Tech assets (TCS, Infosys, Wipro) form a highly correlated sector block.
-                    </p>
-                </div>
-            </div>
-        </section>
-
-        <!-- SECTION 5: ELBOW + SILHOUETTE OPTIMIZATION -->
-        <section id="section-optimization" class="fade-in-section">
-            <h2 class="section-header">4. Clustering Optimization Metrics</h2>
-            <div class="grid-2-equal">
-                <div class="card">
-                    <div class="card-title">Elbow Optimization Curve (K=2 to 8)</div>
-                    <div class="chart-wrapper">
-                        <canvas id="elbowChart"></canvas>
+        <!-- Right Side Content Area -->
+        <div class="content-area" style="padding: 2.5rem 3rem; display: flex; flex-direction: column; gap: 2.5rem; overflow-y: auto; height: calc(100vh - 70px);">
+            
+            <!-- SECTION 1: HERO & STOCK TICKER BADGES & KPI STRIP -->
+            <section id="section-hero" class="fade-in-section">
+                <div class="card" id="heroBadgeCard" style="background: linear-gradient(135deg, rgba(10, 20, 38, 0.9) 0%, rgba(5, 13, 26, 0.95) 100%); border-left: 4px solid var(--accent);">
+                    <span class="kpi-label" style="color: var(--accent); font-size: 0.8rem; margin-bottom: 0.5rem; display: block;">Indian Blue-Chip Equities Under Analysis</span>
+                    <div class="ticker-badges-container" id="tickerBadges">
+                        <span class="ticker-badge" data-ticker="RELIANCE.NS">Reliance (RELIANCE.NS)</span>
+                        <span class="ticker-badge" data-ticker="TCS.NS">TCS (TCS.NS)</span>
+                        <span class="ticker-badge" data-ticker="HDFCBANK.NS">HDFC Bank (HDFCBANK.NS)</span>
+                        <span class="ticker-badge" data-ticker="INFY.NS">Infosys (INFY.NS)</span>
+                        <span class="ticker-badge" data-ticker="ICICIBANK.NS">ICICI Bank (ICICIBANK.NS)</span>
+                        <span class="ticker-badge" data-ticker="WIPRO.NS">Wipro (WIPRO.NS)</span>
+                        <span class="ticker-badge" data-ticker="BAJFINANCE.NS">Bajaj Finance (BAJFINANCE.NS)</span>
+                        <span class="ticker-badge" data-ticker="MARUTI.NS">Maruti Suzuki (MARUTI.NS)</span>
                     </div>
                 </div>
-                <div class="card">
-                    <div class="card-title">Silhouette Score Comparison (K=2 to 8)</div>
-                    <div class="chart-wrapper">
-                        <canvas id="silhouetteChart"></canvas>
-                    </div>
-                </div>
-            </div>
-        </section>
 
-        <!-- SECTION 6: PCA SCATTER + EXPLAINED VARIANCE -->
-        <section id="section-pca" class="fade-in-section">
-            <h2 class="section-header">5. Dimensionality Reduction (PCA)</h2>
-            <div class="grid-2">
-                <div class="card">
-                    <div class="card-title">2D PCA Projection & Dynamic Clusters</div>
-                    <div class="chart-wrapper">
-                        <canvas id="pcaScatterChart"></canvas>
+                <!-- KPI Analytics Strip -->
+                <div class="kpi-strip">
+                    <div class="kpi-card">
+                        <span class="kpi-label">Market Observations (Days)</span>
+                        <span class="kpi-value" id="kpi-days">--</span>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-label" id="silhouetteLabel">Silhouette Score (K=3)</span>
+                        <span class="kpi-value" id="kpi-silhouette">--</span>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-label">PC1 Var Explained</span>
+                        <span class="kpi-value" id="kpi-pc1">--</span>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-label">Cumulative 2D Var (PC1+PC2)</span>
+                        <span class="kpi-value" id="kpi-pccum">--</span>
                     </div>
                 </div>
-                <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
-                    <div>
-                        <div class="card-title">Principal Component Explained Variance</div>
-                        <div class="chart-wrapper" style="min-height: 280px;">
-                            <canvas id="pcaVarianceChart"></canvas>
+            </section>
+
+            <!-- SECTION 2: REGIME COLORED BENCHMARK PRICE TIMELINE -->
+            <section id="section-price" class="fade-in-section">
+                <h2 class="section-header">1. Market Benchmark & Regime Timeline</h2>
+                <div class="card">
+                    <div class="card-title">
+                        <span id="priceChartTitle">Nifty 50 Index Close Price Overlayed with Composite Market Regimes</span>
+                        <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: normal;">Every 5th trading day plotted | Segments connected</span>
+                    </div>
+                    <div class="chart-wrapper chart-wrapper-tall">
+                        <canvas id="priceChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION 3: MULTI-LINE STOCK COMPARISON CHART -->
+            <section id="section-comparison" class="fade-in-section">
+                <h2 class="section-header">2. Relative Performance Comparison</h2>
+                <div class="card">
+                    <div class="card-title">
+                        <span id="comparisonChartTitle">Stocks Normalized to 100 at Start Date</span>
+                        <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: normal;">Click legend to toggle lines | Hover to compare</span>
+                    </div>
+                    <div class="chart-wrapper chart-wrapper-tall">
+                        <canvas id="stockComparisonChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION 4: 8x8 CORRELATION HEATMAP (Canvas Element) -->
+            <section id="section-heatmap" class="fade-in-section">
+                <h2 class="section-header">3. Pairwise Asset Correlation Heatmap</h2>
+                <div class="grid-2" style="grid-template-columns: 1fr 1fr; align-items: center;">
+                    <div class="card" style="display: flex; justify-content: center; align-items: center; padding: 2rem;">
+                        <!-- Custom Heatmap Drawing Canvas -->
+                        <canvas id="heatmapCanvas" width="480" height="480" style="max-width: 100%; height: auto; display: block; background: transparent;"></canvas>
+                    </div>
+                    <div class="card" style="height: 100%; display: flex; flex-direction: column; justify-content: center; gap: 1.25rem;">
+                        <div class="card-title" style="border: none; margin-bottom: 0; padding: 0;">Statistical Correlation Insights</div>
+                        <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6;">
+                            This heatmap is rendered directly on a canvas element using a **blue-to-red diverging color scale**. 
+                            Values close to <b style="color: #ef4444;">+1.0 (Dark Red)</b> represent strong positive correlation in daily returns, while values near <b style="color: #3b82f6;">-1.0 (Dark Blue)</b> indicate negative correlation.
+                        </p>
+                        <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6;">
+                            Large-cap equities exhibit high positive correlation (typically $0.4 - 0.7$) to each other and the market index, confirming structural asset-class co-movements. Sector stocks (e.g. TCS, Infosys, Wipro in technology) cluster closely together.
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION 5: ELBOW + SILHOUETTE OPTIMIZATION -->
+            <section id="section-optimization" class="fade-in-section">
+                <h2 class="section-header">4. Clustering Optimization Metrics</h2>
+                <div class="grid-2-equal">
+                    <div class="card">
+                        <div class="card-title">Elbow Optimization Curve (K=2 to 8)</div>
+                        <div class="chart-wrapper">
+                            <canvas id="elbowChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-title">Silhouette Score Comparison (K=2 to 8)</div>
+                        <div class="chart-wrapper">
+                            <canvas id="silhouetteChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION 6: PCA SCATTER + EXPLAINED VARIANCE -->
+            <section id="section-pca" class="fade-in-section">
+                <h2 class="section-header">5. Dimensionality Reduction (PCA)</h2>
+                <div class="grid-2">
+                    <div class="card">
+                        <div class="card-title">2D PCA Projection & Dynamic Clusters</div>
+                        <div class="chart-wrapper">
+                            <canvas id="pcaScatterChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <div class="card-title">Principal Component Explained Variance</div>
+                            <div class="chart-wrapper" style="min-height: 280px;">
+                                <canvas id="pcaVarianceChart"></canvas>
                         </div>
                     </div>
                     <div style="border-top: 1px solid var(--border-color); padding-top: 1rem; margin-top: 1rem; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5;">
                         <p><b>Feature Reduction:</b> The 6 engineered daily indicators are standard-scaled and projected into PCA coordinate space. The first two components describe a vast majority of feature variance, validating the 2D projection view.</p>
                     </div>
                 </div>
-            </div>
-        </section>
+            </section>
 
-        <!-- SECTION 7: DOUGHNUT + SUMMARY STATS TABLE -->
-        <section id="section-breakdown" class="fade-in-section">
-            <h2 class="section-header">6. Regime Analytics & Summary Statistics</h2>
-            <div class="grid-2" style="grid-template-columns: 0.75fr 1.25fr;">
-                <div class="card">
-                    <div class="card-title">Composite Regime Distribution</div>
-                    <div class="chart-wrapper">
-                        <canvas id="doughnutChart"></canvas>
+            <!-- SECTION 7: DOUGHNUT + SUMMARY STATS TABLE -->
+            <section id="section-breakdown" class="fade-in-section">
+                <h2 class="section-header">6. Regime Analytics & Summary Statistics</h2>
+                <div class="grid-2" style="grid-template-columns: 0.75fr 1.25fr;">
+                    <div class="card">
+                        <div class="card-title">Composite Regime Distribution</div>
+                        <div class="chart-wrapper">
+                            <canvas id="doughnutChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card" style="display: flex; flex-direction: column; justify-content: center;">
+                        <div class="card-title" style="margin-bottom: 0.75rem;">Performance Summary Profile</div>
+                        <div style="overflow-x: auto;">
+                            <table id="summaryTable">
+                                <thead>
+                                    <tr>
+                                        <th>Regime State</th>
+                                        <th>Observed Days</th>
+                                        <th>% share</th>
+                                        <th>Avg Return (21d)</th>
+                                        <th>Avg Volatility</th>
+                                        <th>Avg RSI</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Loaded dynamically via app.js -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
-                <div class="card" style="display: flex; flex-direction: column; justify-content: center;">
-                    <div class="card-title">Performance Summary Profile</div>
-                    <div style="overflow-x: auto;">
-                        <table id="summaryTable">
-                            <thead>
-                                <tr>
-                                    <th>Regime State</th>
-                                    <th>Observed Days</th>
-                                    <th>% share</th>
-                                    <th>Avg Return (21d)</th>
-                                    <th>Avg Volatility</th>
-                                    <th>Avg RSI</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <!-- Loaded dynamically via app.js -->
-                            </tbody>
-                        </table>
+            </section>
+
+            <!-- SECTION 8: METHODOLOGY REFERENCE -->
+            <section id="section-methodology" class="fade-in-section">
+                <h2 class="section-header">7. Quantitative Methodology Reference</h2>
+                <div class="method-grid">
+                    <div class="method-card">
+                        <div class="method-num">01</div>
+                        <h3>Composite Features</h3>
+                        <p>Daily indicators are calculated for 8 major Indian stocks: Log return, Volatility, Mean return, Momentum, RSI-14, and MA ratio. These features are then **averaged** to create a unified composite matrix.</p>
+                    </div>
+                    <div class="method-card">
+                        <div class="method-num">02</div>
+                        <h3>Clustering & PCA</h3>
+                        <p>Scale composite features via <code>StandardScaler</code>. PCA reduces dimensionality for plotting. K-Means fits for $K=3$. Centroids are dynamically sorted by annualized returns to map Bear, Sideways, and Bull regimes.</p>
+                    </div>
+                    <div class="method-card">
+                        <div class="method-num">03</div>
+                        <h3>Monthly Ward Linkage</h3>
+                        <p>Composite daily data is downsampled using <code>resample("ME")</code>. Agglomerative Hierarchical clustering applies **Ward linkage** on the resampled monthly data to partition long-term cycles.</p>
                     </div>
                 </div>
-            </div>
-        </section>
+            </section>
 
-        <!-- SECTION 8: METHODOLOGY REFERENCE -->
-        <section id="section-methodology" class="fade-in-section">
-            <h2 class="section-header">7. Quantitative Methodology Reference</h2>
-            <div class="method-grid">
-                <div class="method-card">
-                    <div class="method-num">01</div>
-                    <h3>Composite Features</h3>
-                    <p>Daily indicators are calculated for 8 major Indian stocks: Log return, Volatility, Mean return, Momentum, RSI-14, and MA ratio. These features are then **averaged** to create a unified composite matrix.</p>
-                </div>
-                <div class="method-card">
-                    <div class="method-num">02</div>
-                    <h3>Clustering & PCA</h3>
-                    <p>Scale composite features via <code>StandardScaler</code>. PCA reduces dimensionality for plotting. K-Means fits for $K=3$. Centroids are dynamically sorted by annualized returns to map Bear, Sideways, and Bull regimes.</p>
-                </div>
-                <div class="method-card">
-                    <div class="method-num">03</div>
-                    <h3>Monthly Ward Linkage</h3>
-                    <p>Composite daily data is downsampled using <code>resample("ME")</code>. Agglomerative Hierarchical clustering applies **Ward linkage** on the resampled monthly data to partition long-term cycles.</p>
-                </div>
-            </div>
-        </section>
-
-    </main>
+        </div>
+        
+    </div>
 
     <!-- App JS logic -->
     <script src="/static/js/app.js"></script>

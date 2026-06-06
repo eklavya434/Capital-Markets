@@ -12,10 +12,9 @@ import scipy.cluster.hierarchy as sch
 
 app = Flask(__name__)
 
-# Global Cache to prevent hitting Yahoo Finance API repeatedly
-_DATA_CACHE = None
-_CACHE_TIMESTAMP = 0
-CACHE_EXPIRY = 3600 * 4  # Cache results for 4 hours
+# In-Memory Raw Data Cache (preserves downloads to support instant parameter sliders)
+_RAW_PRICE_CACHE = {}
+_CUSTOM_PRICE_CACHE = None
 
 # Tickers config
 BENCHMARK_TICKER = "^NSEI"
@@ -60,18 +59,13 @@ def compute_rsi(prices, window=14):
     rsi = 100 - (100 / (1 + rs))
     return rsi
 
-def generate_multi_stock_regime_data():
-    global _DATA_CACHE, _CACHE_TIMESTAMP
-    
-    # Check if cache is still valid
-    if _DATA_CACHE is not None and (time.time() - _CACHE_TIMESTAMP) < CACHE_EXPIRY:
-        return _DATA_CACHE
-
-    print("[*] Downloading index and stock prices from Yahoo Finance...")
-    
-    data_dfs = {}
-    
-    # 1. Download Benchmark
+def load_raw_data_if_needed():
+    global _RAW_PRICE_CACHE
+    if _RAW_PRICE_CACHE:
+        return
+        
+    print("[*] Pre-downloading raw benchmarks and stock series from Yahoo Finance...")
+    # 1. Download Nifty 50
     try:
         df_bench = yf.download(BENCHMARK_TICKER, start="2010-01-01", end="2024-12-31")
         if not df_bench.empty:
@@ -80,13 +74,12 @@ def generate_multi_stock_regime_data():
                 df_bench.columns = [col[0] for col in df_bench.columns]
             df_bench['Date'] = pd.to_datetime(df_bench['Date'])
             df_bench['Close'] = df_bench['Close'].astype(float)
-            data_dfs[BENCHMARK_TICKER] = df_bench[['Date', 'Close']].copy()
-            print(f"    - Loaded benchmark {BENCHMARK_TICKER} with {len(df_bench)} rows.")
+            _RAW_PRICE_CACHE[BENCHMARK_TICKER] = df_bench[['Date', 'Close']].copy()
+            print(f"    - Preloaded benchmark {BENCHMARK_TICKER}")
     except Exception as e:
-        print(f"[!] Error downloading benchmark {BENCHMARK_TICKER}: {e}")
+        print(f"[!] Error preloading benchmark {BENCHMARK_TICKER}: {e}")
         
-    # 2. Download 8 Stocks with graceful skipping
-    loaded_stocks = []
+    # 2. Download 8 Stocks
     for ticker in STOCK_TICKERS:
         try:
             df_stock = yf.download(ticker, start="2010-01-01", end="2024-12-31")
@@ -96,44 +89,53 @@ def generate_multi_stock_regime_data():
                     df_stock.columns = [col[0] for col in df_stock.columns]
                 df_stock['Date'] = pd.to_datetime(df_stock['Date'])
                 df_stock['Close'] = df_stock['Close'].astype(float)
-                data_dfs[ticker] = df_stock[['Date', 'Close']].copy()
-                loaded_stocks.append(ticker)
-                print(f"    - Loaded stock {ticker} with {len(df_stock)} rows.")
-            else:
-                print(f"[!] Warning: {ticker} returned empty dataset. Skipping.")
+                _RAW_PRICE_CACHE[ticker] = df_stock[['Date', 'Close']].copy()
+                print(f"    - Preloaded stock {ticker}")
         except Exception as e:
-            print(f"[!] Error downloading stock {ticker}: {e}. Skipping.")
+            print(f"[!] Error preloading stock {ticker}: {e}")
 
-    if BENCHMARK_TICKER not in data_dfs:
-        raise ValueError("Critical: Failed to download Nifty 50 benchmark data.")
-    if len(loaded_stocks) == 0:
-        raise ValueError("Critical: Failed to download any of the 8 Indian stocks.")
+def run_regime_pipeline(k, vol_win, ret_win, mom_win, rsi_win, selected_stocks):
+    global _RAW_PRICE_CACHE, _CUSTOM_PRICE_CACHE
 
-    # 3. Align all dataframes by doing an inner join on Date
-    merged_df = data_dfs[BENCHMARK_TICKER].rename(columns={'Close': 'Nifty50'})
-    for ticker in loaded_stocks:
-        temp_df = data_dfs[ticker][['Date', 'Close']].rename(columns={'Close': ticker})
-        merged_df = pd.merge(merged_df, temp_df, on='Date', how='inner')
+    # 1. Check if we use custom uploaded data or default presets
+    if _CUSTOM_PRICE_CACHE is not None:
+        df_source = _CUSTOM_PRICE_CACHE['df'].copy()
+        loaded_stocks = [s for s in selected_stocks if s in _CUSTOM_PRICE_CACHE['stock_tickers'] and s in df_source.columns]
+        if not loaded_stocks:
+            loaded_stocks = [s for s in _CUSTOM_PRICE_CACHE['stock_tickers'] if s in df_source.columns]
+        short_names = _CUSTOM_PRICE_CACHE['short_names']
+        benchmark_col = 'Nifty50'
+    else:
+        load_raw_data_if_needed()
+        if BENCHMARK_TICKER not in _RAW_PRICE_CACHE:
+            raise ValueError("Benchmark data not preloaded.")
+            
+        df_source = _RAW_PRICE_CACHE[BENCHMARK_TICKER].rename(columns={'Close': 'Nifty50'})
+        loaded_stocks = [s for s in selected_stocks if s in _RAW_PRICE_CACHE]
+        short_names = SHORT_NAMES
         
-    merged_df = merged_df.sort_values('Date').reset_index(drop=True)
-    print(f"[*] Aligned dataset contains {len(merged_df)} daily observations.")
+        # Merge selected stocks
+        for ticker in loaded_stocks:
+            temp_df = _RAW_PRICE_CACHE[ticker][['Date', 'Close']].rename(columns={'Close': ticker})
+            df_source = pd.merge(df_source, temp_df, on='Date', how='inner')
+            
+        df_source = df_source.sort_values('Date').reset_index(drop=True)
+        benchmark_col = 'Nifty50'
 
-    # 4. Feature Engineering per Stock & Composite Averaging
+    if len(loaded_stocks) == 0:
+        raise ValueError("No active stocks selected or available for feature averaging.")
+
+    # 2. Compute stock-specific rolling indicators
     stock_features = {}
     for ticker in loaded_stocks:
-        prices = merged_df[ticker]
+        prices = df_source[ticker]
         
-        # Calculate daily log return
         log_ret = np.log(prices / prices.shift(1))
-        # 21-day rolling annualized volatility
-        vol_21 = log_ret.rolling(window=21).std() * np.sqrt(252)
-        # 21-day rolling annualized mean return
-        mean_ret_21 = log_ret.rolling(window=21).mean() * 252
-        # 63-day momentum (log return)
-        mom_63 = np.log(prices / prices.shift(63))
-        # RSI-14
-        rsi_14 = compute_rsi(prices, window=14)
-        # 50d/200d Moving Average Ratio
+        vol_21 = log_ret.rolling(window=vol_win).std() * np.sqrt(252)
+        mean_ret_21 = log_ret.rolling(window=ret_win).mean() * 252
+        mom_63 = np.log(prices / prices.shift(mom_win))
+        rsi_14 = compute_rsi(prices, window=rsi_win)
+        
         ma_50 = prices.rolling(window=50).mean()
         ma_200 = prices.rolling(window=200).mean()
         ma_50_200 = ma_50 / ma_200
@@ -147,31 +149,41 @@ def generate_multi_stock_regime_data():
             'ma_50_200': ma_50_200
         }
 
-    # Average features across all successfully loaded stocks to form composite feature columns
+    # 3. Compile composite features by averaging across selected assets
     feature_cols = ['log_ret', 'vol_21', 'mean_ret_21', 'mom_63', 'rsi_14', 'ma_50_200']
+    df_features = df_source[['Date', benchmark_col] + loaded_stocks].copy()
+    
     for feat in feature_cols:
         series_list = [stock_features[ticker][feat] for ticker in loaded_stocks]
-        merged_df[feat] = pd.concat(series_list, axis=1).mean(axis=1)
+        df_features[feat] = pd.concat(series_list, axis=1).mean(axis=1)
 
-    # 5. Handle Correlation Matrix (8x8 return correlation)
-    returns_df = merged_df[loaded_stocks].pct_change().dropna()
-    corr_matrix_raw = returns_df.corr().values  # 8x8 numpy array
-    short_labels = [SHORT_NAMES[t] for t in loaded_stocks]
-    
+    # 4. Pairwise stock returns correlation matrix
+    returns_df = df_features[loaded_stocks].pct_change().dropna()
+    if not returns_df.empty:
+        corr_matrix = returns_df.corr().values
+        short_labels = [short_names.get(t, t) for t in loaded_stocks]
+    else:
+        corr_matrix = np.ones((len(loaded_stocks), len(loaded_stocks)))
+        short_labels = [short_names.get(t, t) for t in loaded_stocks]
+        
     correlation_data = {
-        'matrix': corr_matrix_raw.tolist(),
+        'matrix': corr_matrix.tolist(),
         'labels': short_labels
     }
 
-    # Drop rows containing NaNs from feature calculation lookbacks
-    df_clean = merged_df.dropna().reset_index(drop=True)
+    # Drop NaNs
+    df_clean = df_features.dropna().reset_index(drop=True)
+    total_days = len(df_clean)
     
-    # 6. Scaling & Modeling
+    if total_days < k + 10:
+        raise ValueError(f"Aligned dataset size ({total_days} days) is too small for the selected lookback windows.")
+
+    # 5. Standardization
     X = df_clean[feature_cols].values
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
-    
-    # PCA
+
+    # 6. PCA (Variance loaders & coordinates)
     pca_full = PCA()
     pca_full.fit(X_scaled)
     pca_var = pca_full.explained_variance_ratio_.tolist()
@@ -180,49 +192,45 @@ def generate_multi_stock_regime_data():
     X_pca_2 = pca_2.fit_transform(X_scaled)
     df_clean['PC1'] = X_pca_2[:, 0]
     df_clean['PC2'] = X_pca_2[:, 1]
-    
-    # K-Means optimization (K=2 to 8)
+
+    # 7. K-Means Optimization Curves (k=2 to 8)
     elbow_data = []
-    for k in range(2, 9):
-        km = KMeans(n_clusters=k, random_state=42, n_init=10)
+    for temp_k in range(2, 9):
+        if total_days < temp_k:
+            continue
+        km = KMeans(n_clusters=temp_k, random_state=42, n_init=10)
         km_labels = km.fit_predict(X_scaled)
         inertia = float(km.inertia_)
         sil = float(silhouette_score(X_scaled, km_labels))
         elbow_data.append({
-            'k': k,
+            'k': temp_k,
             'inertia': inertia,
             'silhouette': sil
         })
-        
-    # Forced K-Means (K=3) & Dynamic Labeling (ranked by composite mean_ret_21)
-    kmeans_3 = KMeans(n_clusters=3, random_state=42, n_init=10)
-    kmeans_3.fit(X_scaled)
-    labels_3 = kmeans_3.labels_
+
+    # 8. Forced K-Means (K=k) & Centroid return-sorting dynamic label map
+    kmeans_k = KMeans(n_clusters=k, random_state=42, n_init=10)
+    kmeans_k.fit(X_scaled)
+    labels_k = kmeans_k.labels_
     
-    # Profile cluster returns
     cluster_returns = []
-    for c in range(3):
-        mask = (labels_3 == c)
+    for c in range(k):
+        mask = (labels_k == c)
         avg_ret = df_clean.loc[mask, 'mean_ret_21'].mean()
         cluster_returns.append((c, avg_ret))
-    
-    # Sort cluster indices ascending
+        
+    # Sort cluster IDs by return ascending
     sorted_clusters = sorted(cluster_returns, key=lambda x: x[1])
-    label_map = {
-        sorted_clusters[0][0]: 0,  # Lowest return = Bear
-        sorted_clusters[1][0]: 1,  # Middle return = Sideways
-        sorted_clusters[2][0]: 2   # Highest return = Bull
-    }
-    df_clean['Regime'] = [label_map[l] for l in labels_3]
-    
-    # 7. Metrics
+    label_map = {sorted_clusters[idx][0]: idx for idx in range(k)}
+    df_clean['Regime'] = [label_map[l] for l in labels_k]
+
+    # 9. Summary metrics
     final_regimes = df_clean['Regime'].values
     silhouette = float(silhouette_score(X_scaled, final_regimes))
     db_index = float(davies_bouldin_score(X_scaled, final_regimes))
     pc1_pct = float(pca_var[0] * 100)
     pc2_pct = float(pca_var[1] * 100)
     pc_cum_pct = pc1_pct + pc2_pct
-    total_days = len(df_clean)
     
     metrics = {
         'silhouette': silhouette,
@@ -232,33 +240,29 @@ def generate_multi_stock_regime_data():
         'total_days': int(total_days)
     }
 
-    # 8. Ward Hierarchical Clustering on Monthly Resampled Composite Data
+    # 10. Ward Linkage Hierarchical resampled
     df_monthly = df_clean.set_index('Date').resample('ME').mean().reset_index()
     X_monthly = df_monthly[feature_cols].values
     X_monthly_scaled = StandardScaler().fit_transform(X_monthly)
-    
-    # Ward Linkage
     linkage_matrix = sch.linkage(X_monthly_scaled, method='ward')
-    
-    # 9. Format API Payload Outputs
-    # Every 5th row for Nifty 50 Timeline
+
+    # 11. Format Payload every 5th row
     df_5th = df_clean.iloc[::5]
     price_data = []
     for _, row in df_5th.iterrows():
         price_data.append({
             'date': row['Date'].strftime('%Y-%m-%d'),
-            'price': float(row['Nifty50']),
+            'price': float(row[benchmark_col]),
             'regime': int(row['Regime']),
             'volatility': float(row['vol_21']),
             'rsi': float(row['rsi_14'])
         })
         
-    # Stock Close prices every 5th row for stock comparison line chart
     stock_data = {}
     for ticker in loaded_stocks:
         stock_data[ticker] = df_5th[ticker].astype(float).round(2).tolist()
-        
-    # PCA scatter 800 sample
+
+    # PCA 800 sample
     df_pca_sample = df_clean.sample(n=min(800, len(df_clean)), random_state=42).sort_index()
     pca_data = []
     for _, row in df_pca_sample.iterrows():
@@ -267,20 +271,19 @@ def generate_multi_stock_regime_data():
             'pc2': float(row['PC2']),
             'regime': int(row['Regime'])
         })
-        
-    # Pie chart percentage shares
+
+    # Pie shares
     regime_counts = df_clean['Regime'].value_counts()
-    pie_data = {
-        'bear': float((regime_counts.get(0, 0) / total_days) * 100),
-        'sideways': float((regime_counts.get(1, 0) / total_days) * 100),
-        'bull': float((regime_counts.get(2, 0) / total_days) * 100)
-    }
-    
-    # Stats table profiles
+    regime_names = {0: 'bear', 1: 'sideways', 2: 'bull'}
+    pie_data = {}
+    for c in range(k):
+        key = regime_names.get(c, f"regime_{c}")
+        pie_data[key] = float((regime_counts.get(c, 0) / total_days) * 100)
+
+    # Summary table data
     summary_data = []
-    names = {0: "Bear", 1: "Sideways", 2: "Bull"}
-    for r in [0, 1, 2]:
-        mask = (df_clean['Regime'] == r)
+    for c in range(k):
+        mask = (df_clean['Regime'] == c)
         df_r = df_clean[mask]
         
         count = len(df_r)
@@ -290,18 +293,19 @@ def generate_multi_stock_regime_data():
         avg_vol = df_r['vol_21'].mean() * 100
         avg_rsi = df_r['rsi_14'].mean()
         
+        name_val = "Bear" if c == 0 else ("Sideways" if (c == 1 and k == 3) else ("Bull" if c == k - 1 else f"Regime {c}"))
+        
         summary_data.append({
-            'regime': r,
-            'name': names[r],
+            'regime': c,
+            'name': name_val,
             'days': int(count),
             'pct': float(pct),
             'avg_ret': float(avg_ret),
             'avg_vol': float(avg_vol),
             'avg_rsi': float(avg_rsi)
         })
-        
-    # Compile the final data package
-    _DATA_CACHE = {
+
+    return {
         'price_data': price_data,
         'stock_data': stock_data,
         'pca_data': pca_data,
@@ -313,9 +317,6 @@ def generate_multi_stock_regime_data():
         'metrics': metrics,
         'total_days': total_days
     }
-    _CACHE_TIMESTAMP = time.time()
-    
-    return _DATA_CACHE
 
 @app.route('/')
 def index():
@@ -324,18 +325,102 @@ def index():
 @app.route('/api/data')
 def get_data():
     try:
-        force_reload = request.args.get('reload', 'false').lower() == 'true'
-        global _DATA_CACHE
-        if force_reload:
-            _DATA_CACHE = None
+        # Check if we need to reset the custom CSV dataset
+        if request.args.get('reset', 'false').lower() == 'true':
+            global _CUSTOM_PRICE_CACHE
+            _CUSTOM_PRICE_CACHE = None
             
-        data = generate_multi_stock_regime_data()
+        # Parse lookback and clustering parameters
+        k = int(request.args.get('k', 3))
+        vol_win = int(request.args.get('vol_win', 21))
+        ret_win = int(request.args.get('ret_win', 21))
+        mom_win = int(request.args.get('mom_win', 63))
+        rsi_win = int(request.args.get('rsi_win', 14))
+        
+        # Parse selected stock list
+        stocks_param = request.args.get('stocks', '')
+        if stocks_param:
+            selected_stocks = [s.strip() for s in stocks_param.split(',')]
+        else:
+            if _CUSTOM_PRICE_CACHE is not None:
+                selected_stocks = _CUSTOM_PRICE_CACHE['stock_tickers']
+            else:
+                selected_stocks = STOCK_TICKERS
+
+        # Run pipeline dynamically in-memory (takes <15ms)
+        data = run_regime_pipeline(k, vol_win, ret_win, mom_win, rsi_win, selected_stocks)
         return jsonify(data)
     except Exception as e:
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/upload', methods=['POST'])
+def upload_file():
+    global _CUSTOM_PRICE_CACHE
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file uploaded'}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'Empty file selected'}), 400
+        
+    try:
+        df = pd.read_csv(file)
+        
+        # Locate date column
+        date_col = None
+        for c in df.columns:
+            if 'date' in c.lower() or 'time' in c.lower() or 'timestamp' in c.lower():
+                date_col = c
+                break
+        if date_col is None:
+            return jsonify({'error': 'Could not find a Date column in CSV.'}), 400
+            
+        df['Date'] = pd.to_datetime(df[date_col])
+        
+        # Collect numeric price columns
+        price_cols = []
+        for c in df.columns:
+            if c == date_col or c == 'Date':
+                continue
+            if pd.api.types.is_numeric_dtype(df[c]):
+                price_cols.append(c)
+                
+        if not price_cols:
+            return jsonify({'error': 'No numeric price columns found.'}), 400
+            
+        df = df.sort_values('Date').reset_index(drop=True)
+        df_clean = df[['Date'] + price_cols].dropna()
+        
+        if len(df_clean) < 100:
+            return jsonify({'error': 'Dataset is too small (requires at least 100 rows).'}), 400
+            
+        if len(price_cols) == 1:
+            # Single asset mode: clone price column to serve as benchmark index
+            ticker = price_cols[0]
+            df_clean = df_clean.rename(columns={ticker: 'Close'})
+            df_clean['Nifty50'] = df_clean['Close']
+            _CUSTOM_PRICE_CACHE = {
+                'df': df_clean[['Date', 'Nifty50', 'Close']].copy(),
+                'stock_tickers': ['Close'],
+                'short_names': {'Close': ticker[:12]}
+            }
+        else:
+            # Multi asset mode: treat first column as index, remaining as stocks
+            bench = price_cols[0]
+            df_clean = df_clean.rename(columns={bench: 'Nifty50'})
+            stocks = price_cols[1:]
+            _CUSTOM_PRICE_CACHE = {
+                'df': df_clean[['Date', 'Nifty50'] + stocks].copy(),
+                'stock_tickers': stocks,
+                'short_names': {s: s[:12] for s in stocks}
+            }
+            
+        return jsonify({'success': True, 'stocks': _CUSTOM_PRICE_CACHE['stock_tickers']})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f"Failed to parse CSV: {str(e)}"}), 500
+
 if __name__ == '__main__':
-    # Flask runs locally on port 5000 by default
     app.run(debug=True, host='127.0.0.1', port=5000)
