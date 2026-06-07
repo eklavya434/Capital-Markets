@@ -178,24 +178,32 @@ document.addEventListener("DOMContentLoaded", () => {
  * Renders checkboxes inside sidebar dynamically
  */
 function renderStockCheckboxes(stocks, checkedStates = {}) {
-    const container = document.querySelector("#stockSelectionGroup > div");
+    const container = document.querySelector(".stock-chips-container");
     if (!container) return;
     container.innerHTML = "";
 
     stocks.forEach(ticker => {
         const label = document.createElement("label");
-        label.style.display = "flex";
-        label.style.alignItems = "center";
-        label.style.gap = "0.5rem";
-        label.style.cursor = "pointer";
+        label.className = "chip-label";
 
         const isChecked = checkedStates[ticker] !== false;
+        if (isChecked) {
+            label.classList.add("active");
+        }
 
         const input = document.createElement("input");
         input.type = "checkbox";
         input.className = "stock-chk";
         input.value = ticker;
         input.checked = isChecked;
+
+        const name = PRESET_STOCK_NAMES[ticker] || ticker;
+        
+        const textSpan = document.createElement("span");
+        textSpan.textContent = name;
+        
+        const dotSpan = document.createElement("span");
+        dotSpan.className = "chip-status-dot";
 
         input.addEventListener("change", () => {
             const checkedCount = document.querySelectorAll(".stock-chk:checked").length;
@@ -204,12 +212,17 @@ function renderStockCheckboxes(stocks, checkedStates = {}) {
                 alert("At least one asset must be selected for analysis.");
                 return;
             }
+            if (input.checked) {
+                label.classList.add("active");
+            } else {
+                label.classList.remove("active");
+            }
             updateDashboard();
         });
 
-        const name = PRESET_STOCK_NAMES[ticker] || ticker;
         label.appendChild(input);
-        label.appendChild(document.createTextNode(` ${name}`));
+        label.appendChild(textSpan);
+        label.appendChild(dotSpan);
         container.appendChild(label);
     });
 }
@@ -240,8 +253,8 @@ function getSelectedStocks() {
  * Get color for a specific regime index
  */
 function getRegimeColor(c, k) {
-    if (c === 0) return '#ef4444'; // Bear is always Red
-    if (c === k - 1) return '#22c55e'; // Bull is always Green
+    if (c === 0) return '#f43f5e'; // Bear is Rose
+    if (c === k - 1) return '#10b981'; // Bull is Emerald
     if (k === 3 && c === 1) return '#f59e0b'; // Sideways is Amber
 
     // Smooth gradient color mapping for other K levels
@@ -257,6 +270,48 @@ function getRegimeName(c, k) {
     if (c === k - 1) return 'Bull Market';
     if (k === 3 && c === 1) return 'Sideways Market';
     return `Regime ${c}`;
+}
+
+/**
+ * Terminal logs display helper
+ */
+function logTerminal(tag, message) {
+    const consoleBody = document.getElementById("terminalConsoleBody");
+    if (!consoleBody) return;
+    
+    const timeStr = new Date().toTimeString().split(' ')[0];
+    
+    const line = document.createElement("div");
+    line.className = "console-line";
+    
+    const timestamp = document.createElement("span");
+    timestamp.className = "console-timestamp";
+    timestamp.textContent = `[${timeStr}]`;
+    
+    const tagSpan = document.createElement("span");
+    tagSpan.className = `console-tag ${tag.toLowerCase()}`;
+    tagSpan.textContent = tag.toUpperCase();
+    
+    const msgSpan = document.createElement("span");
+    msgSpan.textContent = message;
+    
+    line.appendChild(timestamp);
+    line.appendChild(tagSpan);
+    line.appendChild(msgSpan);
+    
+    const oldCursor = consoleBody.querySelector(".console-cursor");
+    if (oldCursor) oldCursor.remove();
+    
+    const cursor = document.createElement("span");
+    cursor.className = "console-cursor";
+    line.appendChild(cursor);
+    
+    consoleBody.appendChild(line);
+    consoleBody.scrollTop = consoleBody.scrollHeight;
+    
+    while (consoleBody.children.length > 45) {
+        consoleBody.removeChild(consoleBody.firstChild);
+    }
 }
 
 /**
@@ -278,7 +333,14 @@ function updateDashboard(isInitial = false) {
         contentArea.style.opacity = "0.5";
     }
 
+    if (isInitial) {
+        logTerminal("sys", "Quantitative terminal loading preset nodes...");
+    } else {
+        logTerminal("feed", `Recalculating pipeline parameters: K=${k}, vol=${vol_win}d, ret=${ret_win}d`);
+    }
+
     const url = `/api/data?k=${k}&vol_win=${vol_win}&ret_win=${ret_win}&mom_win=${mom_win}&rsi_win=${rsi_win}&stocks=${stocks}&benchmark=${benchmark}`;
+    const startTime = performance.now();
 
     fetch(url)
         .then(response => {
@@ -288,6 +350,15 @@ function updateDashboard(isInitial = false) {
             return response.json();
         })
         .then(data => {
+            const duration = Math.round(performance.now() - startTime);
+            const latencyTel = document.getElementById("latencyTelemetry");
+            if (latencyTel) {
+                latencyTel.textContent = `LATENCY: ${duration}ms`;
+            }
+
+            logTerminal("solv", `K-Means solver converged. Silhouette score: ${data.metrics.silhouette.toFixed(3)}. Solver: ${duration}ms`);
+            logTerminal("sys", `SVD Eigen decomposition complete. PC1 Explained Var: ${data.metrics.pc1_pct.toFixed(1)}%`);
+
             processDashboardData(data);
             if (contentArea) contentArea.style.opacity = "1.0";
 
@@ -298,6 +369,7 @@ function updateDashboard(isInitial = false) {
         })
         .catch(error => {
             console.error("Dashboard update failed:", error);
+            logTerminal("sys", `ERROR: Solver pipeline failed: ${error.message}`);
             if (contentArea) contentArea.style.opacity = "1.0";
             hideFullPageLoading();
             alert("Error running regime model: " + error.message);
@@ -452,18 +524,18 @@ function renderPriceChart(priceData, k) {
             maintainAspectRatio: false,
             scales: {
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                    grid: { display: false },
                     ticks: {
                         color: '#94a3b8',
                         maxTicksLimit: 12,
-                        font: { family: 'Outfit', size: 11 }
+                        font: { family: 'Inter', size: 10 }
                     }
                 },
                 y: {
-                    grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                    grid: { color: 'rgba(255, 255, 255, 0.015)' },
                     ticks: {
                         color: '#94a3b8',
-                        font: { family: 'Outfit', size: 11 }
+                        font: { family: 'Inter', size: 10 }
                     }
                 }
             },
@@ -472,15 +544,15 @@ function renderPriceChart(priceData, k) {
                     position: 'top',
                     labels: {
                         color: '#f8fafc',
-                        font: { family: 'Outfit', size: 12 },
+                        font: { family: 'Inter', size: 11 },
                         usePointStyle: true
                     }
                 },
                 tooltip: {
                     intersect: false,
                     mode: 'index',
-                    titleFont: { family: 'Outfit', size: 13 },
-                    bodyFont: { family: 'Outfit', size: 12 },
+                    titleFont: { family: 'Inter', size: 12 },
+                    bodyFont: { family: 'Inter', size: 11 },
                     backgroundColor: 'rgba(5, 13, 26, 0.95)',
                     borderColor: 'rgba(255, 255, 255, 0.1)',
                     borderWidth: 1
@@ -534,24 +606,24 @@ function renderStockComparisonChart(priceData, stockData, labels) {
             maintainAspectRatio: false,
             scales: {
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                    grid: { display: false },
                     ticks: {
                         color: '#94a3b8',
                         maxTicksLimit: 12,
-                        font: { family: 'Outfit', size: 11 }
+                        font: { family: 'Inter', size: 10 }
                     }
                 },
                 y: {
-                    grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                    grid: { color: 'rgba(255, 255, 255, 0.015)' },
                     title: {
                         display: true,
                         text: 'Performance Index (Normalized to 100)',
                         color: '#94a3b8',
-                        font: { family: 'Outfit', size: 12 }
+                        font: { family: 'Inter', size: 11 }
                     },
                     ticks: {
                         color: '#94a3b8',
-                        font: { family: 'Outfit', size: 11 }
+                        font: { family: 'Inter', size: 10 }
                     }
                 }
             },
@@ -560,15 +632,15 @@ function renderStockComparisonChart(priceData, stockData, labels) {
                     position: 'top',
                     labels: {
                         color: '#f8fafc',
-                        font: { family: 'Outfit', size: 11 },
+                        font: { family: 'Inter', size: 10 },
                         usePointStyle: true
                     }
                 },
                 tooltip: {
                     intersect: false,
                     mode: 'index',
-                    titleFont: { family: 'Outfit', size: 13 },
-                    bodyFont: { family: 'Outfit', size: 12 },
+                    titleFont: { family: 'Inter', size: 12 },
+                    bodyFont: { family: 'Inter', size: 11 },
                     backgroundColor: 'rgba(5, 13, 26, 0.95)',
                     borderColor: 'rgba(255, 255, 255, 0.1)',
                     borderWidth: 1,
@@ -642,7 +714,7 @@ function drawCorrelationHeatmap(correlationData) {
     }
 
     ctx.fillStyle = "#94a3b8";
-    ctx.font = "500 10px 'Outfit', sans-serif";
+    ctx.font = "500 10px 'Inter', sans-serif";
 
     ctx.textAlign = "right";
     for (let i = 0; i < n; i++) {
@@ -691,13 +763,13 @@ function renderElbowAndSilhouette(elbowData, currentK) {
             maintainAspectRatio: false,
             scales: {
                 x: {
-                    title: { display: true, text: 'Number of Clusters (k)', color: '#94a3b8', font: { family: 'Outfit' } },
-                    grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                    title: { display: true, text: 'Number of Clusters (k)', color: '#94a3b8', font: { family: 'Inter' } },
+                    grid: { display: false },
                     ticks: { color: '#94a3b8' }
                 },
                 y: {
-                    title: { display: true, text: 'Inertia', color: '#94a3b8', font: { family: 'Outfit' } },
-                    grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                    title: { display: true, text: 'Inertia', color: '#94a3b8', font: { family: 'Inter' } },
+                    grid: { color: 'rgba(255, 255, 255, 0.015)' },
                     ticks: { color: '#94a3b8' }
                 }
             },
@@ -714,8 +786,8 @@ function renderElbowAndSilhouette(elbowData, currentK) {
             datasets: [{
                 label: 'Silhouette Score',
                 data: silhouettes,
-                backgroundColor: kVals.map(k => k === currentK ? '#22c55e' : 'rgba(59, 130, 246, 0.3)'),
-                borderColor: kVals.map(k => k === currentK ? '#22c55e' : '#3b82f6'),
+                backgroundColor: kVals.map(k => k === currentK ? '#10b981' : 'rgba(59, 130, 246, 0.25)'),
+                borderColor: kVals.map(k => k === currentK ? '#10b981' : '#3b82f6'),
                 borderWidth: 1,
                 borderRadius: 4
             }]
@@ -725,13 +797,13 @@ function renderElbowAndSilhouette(elbowData, currentK) {
             maintainAspectRatio: false,
             scales: {
                 x: {
-                    title: { display: true, text: 'Number of Clusters (k)', color: '#94a3b8', font: { family: 'Outfit' } },
-                    grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                    title: { display: true, text: 'Number of Clusters (k)', color: '#94a3b8', font: { family: 'Inter' } },
+                    grid: { display: false },
                     ticks: { color: '#94a3b8' }
                 },
                 y: {
-                    title: { display: true, text: 'Silhouette Score', color: '#94a3b8', font: { family: 'Outfit' } },
-                    grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                    title: { display: true, text: 'Silhouette Score', color: '#94a3b8', font: { family: 'Inter' } },
+                    grid: { color: 'rgba(255, 255, 255, 0.015)' },
                     ticks: { color: '#94a3b8' }
                 }
             },
@@ -778,18 +850,18 @@ function renderPCACharts(pcaData, pcaVar, k) {
             maintainAspectRatio: false,
             scales: {
                 x: {
-                    title: { display: true, text: 'PC1', color: '#94a3b8', font: { family: 'Outfit' } },
-                    grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                    title: { display: true, text: 'PC1', color: '#94a3b8', font: { family: 'Inter' } },
+                    grid: { display: false },
                     ticks: { color: '#94a3b8' }
                 },
                 y: {
-                    title: { display: true, text: 'PC2', color: '#94a3b8', font: { family: 'Outfit' } },
-                    grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                    title: { display: true, text: 'PC2', color: '#94a3b8', font: { family: 'Inter' } },
+                    grid: { color: 'rgba(255, 255, 255, 0.015)' },
                     ticks: { color: '#94a3b8' }
                 }
             },
             plugins: {
-                legend: { labels: { color: '#f8fafc', usePointStyle: true, font: { family: 'Outfit' } } }
+                legend: { labels: { color: '#f8fafc', usePointStyle: true, font: { family: 'Inter' } } }
             }
         }
     });
@@ -814,7 +886,7 @@ function renderPCACharts(pcaData, pcaVar, k) {
                     type: 'bar',
                     label: 'Individual Explained Var',
                     data: indVars,
-                    backgroundColor: 'rgba(59, 130, 246, 0.6)',
+                    backgroundColor: 'rgba(59, 130, 246, 0.45)',
                     borderColor: '#3b82f6',
                     borderWidth: 1,
                     yAxisID: 'y',
@@ -824,11 +896,11 @@ function renderPCACharts(pcaData, pcaVar, k) {
                     type: 'line',
                     label: 'Cumulative Explained Var',
                     data: cumVars,
-                    borderColor: '#22c55e',
+                    borderColor: '#10b981',
                     borderWidth: 2,
                     fill: false,
                     pointRadius: 4,
-                    pointBackgroundColor: '#22c55e',
+                    pointBackgroundColor: '#10b981',
                     yAxisID: 'y1'
                 }
             ]
@@ -838,27 +910,27 @@ function renderPCACharts(pcaData, pcaVar, k) {
             maintainAspectRatio: false,
             scales: {
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.03)' },
-                    ticks: { color: '#94a3b8', font: { family: 'Outfit' } }
+                    grid: { display: false },
+                    ticks: { color: '#94a3b8', font: { family: 'Inter' } }
                 },
                 y: {
                     type: 'linear',
                     position: 'left',
-                    title: { display: true, text: 'Individual Variance (%)', color: '#94a3b8', font: { family: 'Outfit' } },
-                    grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                    title: { display: true, text: 'Individual Variance (%)', color: '#94a3b8', font: { family: 'Inter' } },
+                    grid: { color: 'rgba(255, 255, 255, 0.015)' },
                     ticks: { color: '#94a3b8' }
                 },
                 y1: {
                     type: 'linear',
                     position: 'right',
                     max: 100,
-                    title: { display: true, text: 'Cumulative Variance (%)', color: '#94a3b8', font: { family: 'Outfit' } },
+                    title: { display: true, text: 'Cumulative Variance (%)', color: '#94a3b8', font: { family: 'Inter' } },
                     grid: { drawOnChartArea: false },
                     ticks: { color: '#94a3b8' }
                 }
             },
             plugins: {
-                legend: { position: 'top', labels: { color: '#f8fafc', font: { family: 'Outfit', size: 10 } } }
+                legend: { position: 'top', labels: { color: '#f8fafc', font: { family: 'Inter', size: 10 } } }
             }
         }
     });
@@ -891,7 +963,7 @@ function renderBreakdown(summaryData, k) {
             plugins: {
                 legend: {
                     position: 'bottom',
-                    labels: { color: '#f8fafc', font: { family: 'Outfit', size: 11 }, usePointStyle: true }
+                    labels: { color: '#f8fafc', font: { family: 'Inter', size: 11 }, usePointStyle: true }
                 }
             },
             cutout: '65%'

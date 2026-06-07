@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dynamic Multi-Asset Market Regime Dynamics | Indian Equities</title>
+    <title>AETHER QUANT | Systematic Regime Terminal</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -13,18 +13,23 @@
     <!-- Loading Screen Overlay -->
     <div id="loadingScreen" class="loading-screen">
         <div class="spinner"></div>
-        <div class="loading-text">ENGINEERING MULTI-ASSET QUANT MODEL...</div>
+        <div class="loading-text">INITIALIZING QUANT ENGINE FEED...</div>
     </div>
 
     <!-- Fixed Navbar -->
-    <nav class="navbar">
+    <nav class="navbar" style="border-bottom: 1px solid rgba(255,255,255,0.08); background: rgba(2, 6, 23, 0.9);">
         <div class="brand">
-            <div class="brand-icon">N</div>
-            <h1 class="brand-title">Indian Equity Regime Analytics</h1>
+            <div class="brand-icon" style="background: linear-gradient(135deg, var(--accent) 0%, #a855f7 100%);">Ω</div>
+            <h1 class="brand-title" style="font-family: var(--font-heading); font-size: 1.15rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;">AETHER <span style="color: var(--accent);">SYSTEMATIC</span></h1>
+            <div class="terminal-telemetry" style="display: flex; gap: 1rem; font-size: 0.7rem; color: var(--text-secondary); font-family: var(--font-mono); align-items: center; margin-left: 2rem;">
+                <span style="display: flex; align-items: center; gap: 0.4rem; color: var(--bull); font-weight: 600;"><span class="blink-dot"></span> SECURE FEED</span>
+                <span style="opacity: 0.5;">|</span>
+                <span id="latencyTelemetry">LATENCY: --ms</span>
+            </div>
         </div>
         <div class="nav-links">
-            <span class="nav-badge" id="dataModeBadge">Default Presets Active</span>
-            <button class="nav-badge" id="resetBtn" style="cursor: pointer; background: rgba(239, 68, 68, 0.1); color: #ef4444; border-color: rgba(239, 68, 68, 0.2); display: none;">Reset to Presets</button>
+            <span class="nav-badge" id="dataModeBadge" style="background-color: rgba(59, 130, 246, 0.05); border-color: rgba(59, 130, 246, 0.2); text-transform: uppercase; font-size: 0.7rem;">Default Presets Active</span>
+            <button class="nav-badge" id="resetBtn" style="cursor: pointer; background: rgba(239, 68, 68, 0.1); color: #ef4444; border-color: rgba(239, 68, 68, 0.25); display: none; text-transform: uppercase; font-size: 0.7rem; font-weight: bold;">Reset Cache</button>
         </div>
     </nav>
 
@@ -32,97 +37,94 @@
     <div class="main-layout" style="display: grid; grid-template-columns: 320px 1fr; min-height: calc(100vh - 70px);">
         
         <!-- Sidebar Controls Panel -->
-        <aside class="sidebar" style="background-color: rgba(10, 20, 38, 0.4); border-right: 1px solid var(--border-color); padding: 2rem 1.5rem; display: flex; flex-direction: column; gap: 2rem; overflow-y: auto; height: calc(100vh - 70px); position: sticky; top: 70px; z-index: 10;">
+        <aside class="sidebar" style="background-color: rgba(6, 8, 20, 0.6); border-right: 1px solid var(--border-color); padding: 2rem 1.5rem; display: flex; flex-direction: column; gap: 1.8rem; overflow-y: auto; height: calc(100vh - 70px); position: sticky; top: 70px; z-index: 10;">
             
             <!-- Asset Selection -->
             <div id="stockSelectionGroup">
-                <h3 class="kpi-label" style="color: var(--accent); margin-bottom: 0.75rem;">Asset Portfolio</h3>
-                <div style="display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.85rem; color: var(--text-secondary);">
-                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                        <input type="checkbox" class="stock-chk" value="RELIANCE.NS" checked> Reliance Industries
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                        <input type="checkbox" class="stock-chk" value="TCS.NS" checked> TCS
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                        <input type="checkbox" class="stock-chk" value="HDFCBANK.NS" checked> HDFC Bank
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                        <input type="checkbox" class="stock-chk" value="INFY.NS" checked> Infosys
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                        <input type="checkbox" class="stock-chk" value="ICICIBANK.NS" checked> ICICI Bank
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                        <input type="checkbox" class="stock-chk" value="WIPRO.NS" checked> Wipro
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                        <input type="checkbox" class="stock-chk" value="BAJFINANCE.NS" checked> Bajaj Finance
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                        <input type="checkbox" class="stock-chk" value="MARUTI.NS" checked> Maruti Suzuki
-                    </label>
+                <h3 class="kpi-label" style="color: var(--text-primary); border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; margin-bottom: 0.75rem; letter-spacing: 0.05em;">PORTFOLIO NODES</h3>
+                <div class="stock-chips-container">
+                    <!-- Loaded dynamically via app.js -->
                 </div>
                 <!-- Dynamic Custom Ticker Input -->
                 <div style="margin-top: 1rem; display: flex; gap: 0.4rem;">
-                    <input type="text" id="customTickerInput" placeholder="Add custom ticker (e.g. AAPL)" style="flex: 1; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.45rem 0.6rem; color: var(--text-primary); font-size: 0.78rem; outline: none; font-family: var(--font-mono); transition: border-color 0.2s;">
-                    <button id="addTickerBtn" style="background: var(--accent); border: none; border-radius: 6px; padding: 0 0.85rem; color: white; cursor: pointer; font-size: 0.78rem; font-weight: 600; transition: all 0.2s;">Add</button>
+                    <input type="text" id="customTickerInput" placeholder="Add custom ticker (e.g. AAPL)" style="flex: 1; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.45rem 0.6rem; color: var(--text-primary); font-size: 0.78rem; outline: none; font-family: var(--font-mono); transition: border-color 0.2s;">
+                    <button id="addTickerBtn" style="background: var(--accent); border: none; border-radius: 6px; padding: 0 0.85rem; color: white; cursor: pointer; font-size: 0.78rem; font-weight: 600; transition: all 0.2s; font-family: var(--font-mono);">Add</button>
                 </div>
             </div>
-
+ 
             <!-- Parameters Sliders -->
             <div>
-                <h3 class="kpi-label" style="color: var(--accent); margin-bottom: 1rem;">Model Parameters</h3>
-                <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+                <h3 class="kpi-label" style="color: var(--text-primary); border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; margin-bottom: 1rem; letter-spacing: 0.05em;">PIPELINE HYPERPARAMETERS</h3>
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
                     
-                    <div style="display: flex; flex-direction: column; gap: 0.4rem;">
-                        <label style="font-size: 0.85rem; color: var(--text-secondary); display: flex; justify-content: space-between;">
-                            <span>Volatility Window</span>
-                            <span id="volVal" style="color: var(--accent); font-family: var(--font-mono); font-weight: bold;">21d</span>
-                        </label>
-                        <input type="range" id="volWin" min="5" max="60" value="21" style="width: 100%;">
+                    <div class="parameter-container">
+                        <div class="parameter-header">
+                            <span class="parameter-title">Volatility Window</span>
+                            <span id="volVal" class="parameter-value">21d</span>
+                        </div>
+                        <input type="range" id="volWin" min="5" max="60" value="21">
+                        <div class="parameter-limits">
+                            <span>5d</span>
+                            <span>60d</span>
+                        </div>
                     </div>
                     
-                    <div style="display: flex; flex-direction: column; gap: 0.4rem;">
-                        <label style="font-size: 0.85rem; color: var(--text-secondary); display: flex; justify-content: space-between;">
-                            <span>Mean Return Window</span>
-                            <span id="retVal" style="color: var(--accent); font-family: var(--font-mono); font-weight: bold;">21d</span>
-                        </label>
-                        <input type="range" id="retWin" min="5" max="60" value="21" style="width: 100%;">
+                    <div class="parameter-container">
+                        <div class="parameter-header">
+                            <span class="parameter-title">Mean Return Window</span>
+                            <span id="retVal" class="parameter-value">21d</span>
+                        </div>
+                        <input type="range" id="retWin" min="5" max="60" value="21">
+                        <div class="parameter-limits">
+                            <span>5d</span>
+                            <span>60d</span>
+                        </div>
                     </div>
-
-                    <div style="display: flex; flex-direction: column; gap: 0.4rem;">
-                        <label style="font-size: 0.85rem; color: var(--text-secondary); display: flex; justify-content: space-between;">
-                            <span>Momentum Window</span>
-                            <span id="momVal" style="color: var(--accent); font-family: var(--font-mono); font-weight: bold;">63d</span>
-                        </label>
-                        <input type="range" id="momWin" min="20" max="120" value="63" style="width: 100%;">
+ 
+                    <div class="parameter-container">
+                        <div class="parameter-header">
+                            <span class="parameter-title">Momentum Window</span>
+                            <span id="momVal" class="parameter-value">63d</span>
+                        </div>
+                        <input type="range" id="momWin" min="20" max="120" value="63">
+                        <div class="parameter-limits">
+                            <span>20d</span>
+                            <span>120d</span>
+                        </div>
                     </div>
-
-                    <div style="display: flex; flex-direction: column; gap: 0.4rem;">
-                        <label style="font-size: 0.85rem; color: var(--text-secondary); display: flex; justify-content: space-between;">
-                            <span>RSI Lookback</span>
-                            <span id="rsiVal" style="color: var(--accent); font-family: var(--font-mono); font-weight: bold;">14d</span>
-                        </label>
-                        <input type="range" id="rsiWin" min="5" max="30" value="14" style="width: 100%;">
+ 
+                    <div class="parameter-container">
+                        <div class="parameter-header">
+                            <span class="parameter-title">RSI Lookback</span>
+                            <span id="rsiVal" class="parameter-value">14d</span>
+                        </div>
+                        <input type="range" id="rsiWin" min="5" max="30" value="14">
+                        <div class="parameter-limits">
+                            <span>5d</span>
+                            <span>30d</span>
+                        </div>
                     </div>
-
-                    <div style="display: flex; flex-direction: column; gap: 0.4rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
-                        <label style="font-size: 0.85rem; color: var(--text-secondary); display: flex; justify-content: space-between;">
-                            <span>Regimes Count (K)</span>
-                            <span id="kVal" style="color: var(--bull); font-family: var(--font-mono); font-weight: bold;">3</span>
-                        </label>
-                        <input type="range" id="kNum" min="2" max="8" value="3" style="width: 100%;">
+ 
+                    <div class="parameter-container" style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 1rem; margin-top: 0.5rem; border-radius: 0; background: transparent; border-left: none; border-right: none; border-bottom: none;">
+                        <div class="parameter-header">
+                            <span class="parameter-title" style="color: var(--text-primary);">Regimes Count (K)</span>
+                            <span id="kVal" class="parameter-value" style="color: var(--bull);">3</span>
+                        </div>
+                        <input type="range" id="kNum" min="2" max="8" value="3">
+                        <div class="parameter-limits">
+                            <span>2</span>
+                            <span>8</span>
+                        </div>
                     </div>
-
+ 
                 </div>
             </div>
-
+ 
             <!-- Drag-and-Drop CSV Uploader -->
             <div>
-                <h3 class="kpi-label" style="color: var(--accent); margin-bottom: 0.75rem;">Upload Custom CSV</h3>
+                <h3 class="kpi-label" style="color: var(--text-primary); border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; margin-bottom: 0.75rem; letter-spacing: 0.05em;">CUSTOM DATASOURCE</h3>
                 <div style="position: relative; width: 100%;">
-                    <label for="csvUploadInput" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; background: rgba(59, 130, 246, 0.03); border: 1px dashed rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 1.25rem 0.5rem; color: var(--accent); font-size: 0.8rem; cursor: pointer; text-align: center; transition: all 0.2s;">
+                    <label for="csvUploadInput" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; background: rgba(59, 130, 246, 0.01); border: 1px dashed rgba(59, 130, 246, 0.2); border-radius: 8px; padding: 1.25rem 0.5rem; color: var(--accent); font-size: 0.8rem; cursor: pointer; text-align: center; transition: all 0.2s;">
                         <svg width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
                             <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
                             <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"/>
@@ -131,20 +133,43 @@
                     </label>
                     <input type="file" id="csvUploadInput" accept=".csv" style="position: absolute; left: 0; top: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer;">
                 </div>
-                <p style="font-size: 0.68rem; color: var(--text-secondary); margin-top: 0.5rem; line-height: 1.3;">
-                    Expects Date and Stock price columns. Single asset or multi-column formats supported.
+                <p style="font-size: 0.65rem; color: var(--text-muted); margin-top: 0.5rem; line-height: 1.3; font-family: var(--font-mono);">
+                    FORMAT: Date, Asset_1, Asset_2, ...
                 </p>
             </div>
 
+            <!-- System Diagnostics Panel -->
+            <div style="margin-top: auto; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                <h3 class="kpi-label" style="color: var(--text-primary); margin-bottom: 0.75rem; letter-spacing: 0.05em; font-size: 0.75rem;">SYSTEM DIAGNOSTICS</h3>
+                <div class="diagnostics-panel">
+                    <div class="diag-row">
+                        <span>SOLVER ENGINE</span>
+                        <span class="diag-val" style="color: var(--accent);">LAPACK syevd</span>
+                    </div>
+                    <div class="diag-row">
+                        <span>MODEL METHOD</span>
+                        <span class="diag-val">K-Means SVD</span>
+                    </div>
+                    <div class="diag-row">
+                        <span>CACHE STATE</span>
+                        <span class="diag-val" style="color: var(--bull);">L1 ACTIVE</span>
+                    </div>
+                    <div class="diag-row">
+                        <span>CORE VERSION</span>
+                        <span class="diag-val">v2.4.1-STABLE</span>
+                    </div>
+                </div>
+            </div>
+ 
         </aside>
-
+ 
         <!-- Right Side Content Area -->
-        <div class="content-area" style="padding: 2.5rem 3rem; display: flex; flex-direction: column; gap: 2.5rem; overflow-y: auto; height: calc(100vh - 70px);">
+        <div class="content-area" style="padding: 2.5rem 3rem; display: flex; flex-direction: column; gap: 2.5rem; overflow-y: auto; height: calc(100vh - 70px); background-color: #020617;">
             
             <!-- SECTION 1: HERO & STOCK TICKER BADGES & KPI STRIP -->
             <section id="section-hero" class="fade-in-section">
-                <div class="card" id="heroBadgeCard" style="background: linear-gradient(135deg, rgba(10, 20, 38, 0.9) 0%, rgba(5, 13, 26, 0.95) 100%); border-left: 4px solid var(--accent);">
-                    <span class="kpi-label" style="color: var(--accent); font-size: 0.8rem; margin-bottom: 0.5rem; display: block;">Indian Blue-Chip Equities Under Analysis</span>
+                <div class="card" id="heroBadgeCard" style="background: rgba(6, 8, 20, 0.4); border-left: 3px solid var(--accent); padding: 1.25rem 1.5rem;">
+                    <span class="kpi-label" style="color: var(--text-secondary); font-size: 0.7rem; margin-bottom: 0.5rem; display: block; font-family: var(--font-mono);">ACTIVE EQUITIES MATRIX</span>
                     <div class="ticker-badges-container" id="tickerBadges">
                         <span class="ticker-badge" data-ticker="RELIANCE.NS">Reliance (RELIANCE.NS)</span>
                         <span class="ticker-badge" data-ticker="TCS.NS">TCS (TCS.NS)</span>
@@ -156,39 +181,39 @@
                         <span class="ticker-badge" data-ticker="MARUTI.NS">Maruti Suzuki (MARUTI.NS)</span>
                     </div>
                 </div>
-
+ 
                 <!-- KPI Analytics Strip -->
                 <div class="kpi-strip">
-                    <div class="kpi-card">
-                        <span class="kpi-label">Market Observations (Days)</span>
+                    <div class="kpi-card" style="background: rgba(6, 8, 20, 0.4);">
+                        <span class="kpi-label">Market Observations</span>
                         <span class="kpi-value" id="kpi-days">--</span>
                     </div>
-                    <div class="kpi-card">
-                        <span class="kpi-label" id="silhouetteLabel">Silhouette Score (K=3)</span>
+                    <div class="kpi-card" style="background: rgba(6, 8, 20, 0.4);">
+                        <span class="kpi-label" id="silhouetteLabel">Silhouette Score</span>
                         <span class="kpi-value" id="kpi-silhouette">--</span>
                     </div>
-                    <div class="kpi-card">
-                        <span class="kpi-label">PC1 Var Explained</span>
+                    <div class="kpi-card" style="background: rgba(6, 8, 20, 0.4);">
+                        <span class="kpi-label">PC1 Variance Ratio</span>
                         <span class="kpi-value" id="kpi-pc1">--</span>
                     </div>
-                    <div class="kpi-card">
-                        <span class="kpi-label">Cumulative 2D Var (PC1+PC2)</span>
+                    <div class="kpi-card" style="background: rgba(6, 8, 20, 0.4);">
+                        <span class="kpi-label">Cumulative 2D Var</span>
                         <span class="kpi-value" id="kpi-pccum">--</span>
                     </div>
                 </div>
             </section>
-
+ 
             <!-- SECTION 2: REGIME COLORED BENCHMARK PRICE TIMELINE -->
             <section id="section-price" class="fade-in-section">
-                <h2 class="section-header">1. Market Benchmark & Regime Timeline</h2>
-                <div class="card">
-                    <div class="card-title">
-                        <span id="priceChartTitle">Nifty 50 Index Close Price Overlayed with Composite Market Regimes</span>
-                        <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem;">
-                            <span style="color: var(--text-secondary); font-weight: normal;">Focus Asset:</span>
-                            <select id="benchmarkSelector" style="background: rgba(10, 20, 38, 0.9); border: 1px solid var(--border-color); border-radius: 4px; padding: 0.25rem 0.5rem; color: var(--accent); font-family: var(--font-mono); font-weight: bold; outline: none; cursor: pointer; transition: border-color 0.2s;">
+                <div class="card" style="background: rgba(6, 8, 20, 0.4);">
+                    <div class="card-header-bar">
+                        <span class="kpi-label" id="priceChartTitle" style="font-size: 0.85rem; color: var(--text-primary);">Nifty 50 Index Close Price Overlayed with Composite Market Regimes</span>
+                        <div style="display: flex; align-items: center; gap: 0.75rem; font-size: 0.8rem;">
+                            <span style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.7rem;">FOCUS ASSET:</span>
+                            <select id="benchmarkSelector" style="background: #020617; border: 1px solid var(--border-color); border-radius: 4px; padding: 0.25rem 0.5rem; color: var(--accent); font-family: var(--font-mono); font-size: 0.75rem; font-weight: bold; outline: none; cursor: pointer; transition: border-color 0.2s;">
                                 <option value="">Nifty 50 (Benchmark)</option>
                             </select>
+                            <span class="card-header-tag">SERIES_TIMELINE</span>
                         </div>
                     </div>
                     <div class="chart-wrapper chart-wrapper-tall">
@@ -196,96 +221,118 @@
                     </div>
                 </div>
             </section>
-
+ 
             <!-- SECTION 3: MULTI-LINE STOCK COMPARISON CHART -->
             <section id="section-comparison" class="fade-in-section">
-                <h2 class="section-header">2. Relative Performance Comparison</h2>
-                <div class="card">
-                    <div class="card-title">
-                        <span id="comparisonChartTitle">Stocks Normalized to 100 at Start Date</span>
-                        <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: normal;">Click legend to toggle lines | Hover to compare</span>
+                <div class="card" style="background: rgba(6, 8, 20, 0.4);">
+                    <div class="card-header-bar">
+                        <span class="kpi-label" id="comparisonChartTitle" style="font-size: 0.85rem; color: var(--text-primary);">Stocks Normalized to 100 at Start Date</span>
+                        <span class="card-header-tag">NORMALIZED_COMPARISON</span>
                     </div>
                     <div class="chart-wrapper chart-wrapper-tall">
                         <canvas id="stockComparisonChart"></canvas>
                     </div>
                 </div>
             </section>
-
+ 
             <!-- SECTION 4: 8x8 CORRELATION HEATMAP (Canvas Element) -->
             <section id="section-heatmap" class="fade-in-section">
-                <h2 class="section-header">3. Pairwise Asset Correlation Heatmap</h2>
                 <div class="grid-2" style="grid-template-columns: 1fr 1fr; align-items: center;">
-                    <div class="card" style="display: flex; justify-content: center; align-items: center; padding: 2rem;">
+                    <div class="card" style="display: flex; justify-content: center; align-items: center; padding: 2rem; background: rgba(6, 8, 20, 0.4);">
                         <!-- Custom Heatmap Drawing Canvas -->
                         <canvas id="heatmapCanvas" width="480" height="480" style="max-width: 100%; height: auto; display: block; background: transparent;"></canvas>
                     </div>
-                    <div class="card" style="height: 100%; display: flex; flex-direction: column; justify-content: center; gap: 1.25rem;">
-                        <div class="card-title" style="border: none; margin-bottom: 0; padding: 0;">Statistical Correlation Insights</div>
-                        <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6;">
-                            This heatmap is rendered directly on a canvas element using a **blue-to-red diverging color scale**. 
-                            Values close to <b style="color: #ef4444;">+1.0 (Dark Red)</b> represent strong positive correlation in daily returns, while values near <b style="color: #3b82f6;">-1.0 (Dark Blue)</b> indicate negative correlation.
-                        </p>
-                        <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6;">
-                            Large-cap equities exhibit high positive correlation (typically $0.4 - 0.7$) to each other and the market index, confirming structural asset-class co-movements. Sector stocks (e.g. TCS, Infosys, Wipro in technology) cluster closely together.
-                        </p>
+                    <div class="card" style="height: 100%; display: flex; flex-direction: column; justify-content: center; gap: 1.25rem; background: rgba(6, 8, 20, 0.4);">
+                        <div class="card-title" style="border: none; margin-bottom: 0; padding: 0; font-family: var(--font-heading); text-transform: uppercase; font-size: 1rem; letter-spacing: 0.05em;">RETURNS COVARIANCE MATRIX</div>
+                        <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 0.8rem; font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-secondary); border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                            <div>• METRIC TYPE:</div><div style="color: var(--text-primary);">Pearson Correlation</div>
+                            <div>• RESOLUTION:</div><div style="color: var(--text-primary);">Daily returns</div>
+                            <div>• GRID PROFILE:</div><div style="color: var(--text-primary);" id="corrGridRes">8 × 8 Nodes</div>
+                            <div>• SCALE FACTOR:</div><div style="color: var(--text-primary);"><span style="color: #ef4444;">+1.00</span> to <span style="color: #3b82f6;">-1.00</span></div>
+                        </div>
+                        <div style="border-top: 1px solid var(--border-color); padding-top: 1rem; font-size: 0.72rem; color: var(--text-muted); line-height: 1.45; font-family: var(--font-mono);">
+                            * Return covariance reflects linear dependencies in asset returns. Co-movements are mapped on a blue-to-red diverging grid, highlighting structural sector clustering.
+                        </div>
                     </div>
                 </div>
             </section>
-
+ 
             <!-- SECTION 5: ELBOW + SILHOUETTE OPTIMIZATION -->
             <section id="section-optimization" class="fade-in-section">
-                <h2 class="section-header">4. Clustering Optimization Metrics</h2>
                 <div class="grid-2-equal">
-                    <div class="card">
-                        <div class="card-title">Elbow Optimization Curve (K=2 to 8)</div>
+                    <div class="card" style="background: rgba(6, 8, 20, 0.4);">
+                        <div class="card-header-bar">
+                            <span class="kpi-label" style="font-size: 0.85rem; color: var(--text-primary);">Elbow Optimization Curve (K=2 to 8)</span>
+                            <span class="card-header-tag">INERTIA_SOLVER</span>
+                        </div>
                         <div class="chart-wrapper">
                             <canvas id="elbowChart"></canvas>
                         </div>
                     </div>
-                    <div class="card">
-                        <div class="card-title">Silhouette Score Comparison (K=2 to 8)</div>
+                    <div class="card" style="background: rgba(6, 8, 20, 0.4);">
+                        <div class="card-header-bar">
+                            <span class="kpi-label" style="font-size: 0.85rem; color: var(--text-primary);">Silhouette Score Comparison (K=2 to 8)</span>
+                            <span class="card-header-tag">SILHOUETTE_SOLVER</span>
+                        </div>
                         <div class="chart-wrapper">
                             <canvas id="silhouetteChart"></canvas>
                         </div>
                     </div>
                 </div>
             </section>
-
+ 
             <!-- SECTION 6: PCA SCATTER + EXPLAINED VARIANCE -->
             <section id="section-pca" class="fade-in-section">
-                <h2 class="section-header">5. Dimensionality Reduction (PCA)</h2>
                 <div class="grid-2">
-                    <div class="card">
-                        <div class="card-title">2D PCA Projection & Dynamic Clusters</div>
+                    <div class="card" style="background: rgba(6, 8, 20, 0.4);">
+                        <div class="card-header-bar">
+                            <span class="kpi-label" style="font-size: 0.85rem; color: var(--text-primary);">2D PCA Projection & Dynamic Clusters</span>
+                            <span class="card-header-tag">EIGENSPACE_PROJECTION</span>
+                        </div>
                         <div class="chart-wrapper">
                             <canvas id="pcaScatterChart"></canvas>
                         </div>
                     </div>
-                    <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+                    <div class="card" style="display: flex; flex-direction: column; justify-content: space-between; background: rgba(6, 8, 20, 0.4);">
                         <div>
-                            <div class="card-title">Principal Component Explained Variance</div>
+                            <div class="card-header-bar">
+                                <span class="kpi-label" style="font-size: 0.85rem; color: var(--text-primary);">Principal Component Explained Variance</span>
+                                <span class="card-header-tag">COVARIANCE_SPECTRUM</span>
+                            </div>
                             <div class="chart-wrapper" style="min-height: 280px;">
                                 <canvas id="pcaVarianceChart"></canvas>
+                            </div>
                         </div>
-                    </div>
-                    <div style="border-top: 1px solid var(--border-color); padding-top: 1rem; margin-top: 1rem; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5;">
-                        <p><b>Feature Reduction:</b> The 6 engineered daily indicators are standard-scaled and projected into PCA coordinate space. The first two components describe a vast majority of feature variance, validating the 2D projection view.</p>
+                        <div style="border-top: 1px solid var(--border-color); padding-top: 1rem; margin-top: 1rem; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5;">
+                            <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 0.6rem; font-family: var(--font-mono); font-size: 0.78rem; margin-bottom: 0.8rem;">
+                                <div>• DIMENSION REDUCTION:</div><div style="color: var(--text-primary);">Principal Component (SVD)</div>
+                                <div>• SOURCE DIMENSIONS:</div><div style="color: var(--text-primary);">6 Aligned Indicators</div>
+                                <div>• PCA COVARIANCE:</div><div style="color: var(--text-primary);">Row-wise Standardized</div>
+                                <div>• SOLVER ENGINE:</div><div style="color: var(--text-primary);">LAPACK syevd</div>
+                            </div>
+                            <p style="font-size: 0.72rem; color: var(--text-muted); line-height: 1.4; font-family: var(--font-mono);">* Dimensionality reduction maps standard-scaled multi-asset parameters onto orthogonal coordinate vectors. Eigenspace coordinates represent macro volatility and return regimes.</p>
+                        </div>
                     </div>
                 </div>
             </section>
-
+ 
             <!-- SECTION 7: DOUGHNUT + SUMMARY STATS TABLE -->
             <section id="section-breakdown" class="fade-in-section">
-                <h2 class="section-header">6. Regime Analytics & Summary Statistics</h2>
                 <div class="grid-2" style="grid-template-columns: 0.75fr 1.25fr;">
-                    <div class="card">
-                        <div class="card-title">Composite Regime Distribution</div>
+                    <div class="card" style="background: rgba(6, 8, 20, 0.4);">
+                        <div class="card-header-bar">
+                            <span class="kpi-label" style="font-size: 0.85rem; color: var(--text-primary);">Composite Regime Distribution</span>
+                            <span class="card-header-tag">SHARE_METRIC</span>
+                        </div>
                         <div class="chart-wrapper">
                             <canvas id="doughnutChart"></canvas>
                         </div>
                     </div>
-                    <div class="card" style="display: flex; flex-direction: column; justify-content: center;">
-                        <div class="card-title" style="margin-bottom: 0.75rem;">Performance Summary Profile</div>
+                    <div class="card" style="display: flex; flex-direction: column; justify-content: center; background: rgba(6, 8, 20, 0.4);">
+                        <div class="card-header-bar">
+                            <span class="kpi-label" style="font-size: 0.85rem; color: var(--text-primary);">Performance Summary Profile</span>
+                            <span class="card-header-tag">REGIME_MATRIX</span>
+                        </div>
                         <div style="overflow-x: auto;">
                             <table id="summaryTable">
                                 <thead>
@@ -306,33 +353,44 @@
                     </div>
                 </div>
             </section>
-
-            <!-- SECTION 8: METHODOLOGY REFERENCE -->
-            <section id="section-methodology" class="fade-in-section">
-                <h2 class="section-header">7. Quantitative Methodology Reference</h2>
-                <div class="method-grid">
-                    <div class="method-card">
-                        <div class="method-num">01</div>
-                        <h3>Composite Features</h3>
-                        <p>Daily indicators are calculated for 8 major Indian stocks: Log return, Volatility, Mean return, Momentum, RSI-14, and MA ratio. These features are then **averaged** to create a unified composite matrix.</p>
+ 
+            <!-- SECTION 8: SYSTEM LOGS CONSOLE -->
+            <section id="section-logs" class="fade-in-section">
+                <div class="card console-card">
+                    <div class="console-header">
+                        <span>MODEL SOLVER FEED & EXECUTION CONSOLE</span>
+                        <span style="color: var(--bull); display: flex; align-items: center; gap: 0.4rem; font-size: 0.7rem;"><span class="blink-dot"></span> FEED RUNNING</span>
                     </div>
-                    <div class="method-card">
-                        <div class="method-num">02</div>
-                        <h3>Clustering & PCA</h3>
-                        <p>Scale composite features via <code>StandardScaler</code>. PCA reduces dimensionality for plotting. K-Means fits for $K=3$. Centroids are dynamically sorted by annualized returns to map Bear, Sideways, and Bull regimes.</p>
-                    </div>
-                    <div class="method-card">
-                        <div class="method-num">03</div>
-                        <h3>Monthly Ward Linkage</h3>
-                        <p>Composite daily data is downsampled using <code>resample("ME")</code>. Agglomerative Hierarchical clustering applies **Ward linkage** on the resampled monthly data to partition long-term cycles.</p>
+                    <div class="console-body" id="terminalConsoleBody">
+                        <div class="console-line">
+                            <span class="console-timestamp">[14:30:00]</span>
+                            <span class="console-tag sys">SYS</span>
+                            <span>Aether Quant Terminal version 2.4.1-stable initialized.</span>
+                        </div>
+                        <div class="console-line">
+                            <span class="console-timestamp">[14:30:00]</span>
+                            <span class="console-tag sys">SYS</span>
+                            <span>Pre-downloaded benchmark ^NSEI. Local CSV caches verified.</span>
+                        </div>
+                        <div class="console-line">
+                            <span class="console-timestamp">[14:30:01]</span>
+                            <span class="console-tag feed">FEED</span>
+                            <span>Secure feed established for active stock nodes. Feeder active.</span>
+                        </div>
+                        <div class="console-line">
+                            <span class="console-timestamp">[14:30:01]</span>
+                            <span class="console-tag sys">SYS</span>
+                            <span>Quantitative pipeline standing by for hyperparameter adjustment...</span>
+                            <span class="console-cursor"></span>
+                        </div>
                     </div>
                 </div>
             </section>
-
+ 
         </div>
         
     </div>
-
+ 
     <!-- App JS logic -->
     <script src="/static/js/app.js"></script>
 </body>

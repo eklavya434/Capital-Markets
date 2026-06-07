@@ -133,3 +133,5 @@ venv.bak/
 # Local Project Ignored Directories
 verification_plots/
 .gemini/
+
+.vercel
