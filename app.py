@@ -64,35 +64,68 @@ def load_raw_data_if_needed():
     if _RAW_PRICE_CACHE:
         return
         
-    print("[*] Pre-downloading raw benchmarks and stock series from Yahoo Finance...")
-    # 1. Download Nifty 50
+    data_dir = os.path.join(os.path.dirname(__file__), 'data')
+    
+    # 1. Load Nifty 50
+    loaded_bench = False
     try:
-        df_bench = yf.download(BENCHMARK_TICKER, start="2010-01-01", end="2024-12-31")
-        if not df_bench.empty:
-            df_bench = df_bench.reset_index()
-            if isinstance(df_bench.columns, pd.MultiIndex):
-                df_bench.columns = [col[0] for col in df_bench.columns]
+        csv_path = os.path.join(data_dir, 'nsei.csv')
+        if os.path.exists(csv_path):
+            df_bench = pd.read_csv(csv_path)
             df_bench['Date'] = pd.to_datetime(df_bench['Date'])
             df_bench['Close'] = df_bench['Close'].astype(float)
             _RAW_PRICE_CACHE[BENCHMARK_TICKER] = df_bench[['Date', 'Close']].copy()
-            print(f"    - Preloaded benchmark {BENCHMARK_TICKER}")
+            print(f"    - Preloaded benchmark {BENCHMARK_TICKER} from local cache")
+            loaded_bench = True
     except Exception as e:
-        print(f"[!] Error preloading benchmark {BENCHMARK_TICKER}: {e}")
+        print(f"[!] Error preloading local benchmark {BENCHMARK_TICKER}: {e}")
         
-    # 2. Download 8 Stocks
-    for ticker in STOCK_TICKERS:
+    if not loaded_bench:
+        print(f"[*] Pre-downloading Nifty 50 {BENCHMARK_TICKER} from yfinance...")
         try:
-            df_stock = yf.download(ticker, start="2010-01-01", end="2024-12-31")
-            if not df_stock.empty:
-                df_stock = df_stock.reset_index()
-                if isinstance(df_stock.columns, pd.MultiIndex):
-                    df_stock.columns = [col[0] for col in df_stock.columns]
+            df_bench = yf.download(BENCHMARK_TICKER, start="2010-01-01", end="2024-12-31")
+            if not df_bench.empty:
+                df_bench = df_bench.reset_index()
+                if isinstance(df_bench.columns, pd.MultiIndex):
+                    df_bench.columns = [col[0] for col in df_bench.columns]
+                df_bench['Date'] = pd.to_datetime(df_bench['Date'])
+                df_bench['Close'] = df_bench['Close'].astype(float)
+                _RAW_PRICE_CACHE[BENCHMARK_TICKER] = df_bench[['Date', 'Close']].copy()
+                print(f"    - Downloaded benchmark {BENCHMARK_TICKER}")
+        except Exception as e:
+            print(f"[!] Error preloading benchmark {BENCHMARK_TICKER} from yfinance: {e}")
+        
+    # 2. Load 8 Stocks
+    for ticker in STOCK_TICKERS:
+        loaded_stock = False
+        filename = ticker.split(".")[0].lower() + ".csv"
+        csv_path = os.path.join(data_dir, filename)
+        
+        try:
+            if os.path.exists(csv_path):
+                df_stock = pd.read_csv(csv_path)
                 df_stock['Date'] = pd.to_datetime(df_stock['Date'])
                 df_stock['Close'] = df_stock['Close'].astype(float)
                 _RAW_PRICE_CACHE[ticker] = df_stock[['Date', 'Close']].copy()
-                print(f"    - Preloaded stock {ticker}")
+                print(f"    - Preloaded stock {ticker} from local cache")
+                loaded_stock = True
         except Exception as e:
-            print(f"[!] Error preloading stock {ticker}: {e}")
+            print(f"[!] Error preloading local stock {ticker}: {e}")
+            
+        if not loaded_stock:
+            print(f"[*] Pre-downloading stock {ticker} from yfinance...")
+            try:
+                df_stock = yf.download(ticker, start="2010-01-01", end="2024-12-31")
+                if not df_stock.empty:
+                    df_stock = df_stock.reset_index()
+                    if isinstance(df_stock.columns, pd.MultiIndex):
+                        df_stock.columns = [col[0] for col in df_stock.columns]
+                    df_stock['Date'] = pd.to_datetime(df_stock['Date'])
+                    df_stock['Close'] = df_stock['Close'].astype(float)
+                    _RAW_PRICE_CACHE[ticker] = df_stock[['Date', 'Close']].copy()
+                    print(f"    - Downloaded stock {ticker}")
+            except Exception as e:
+                print(f"[!] Error preloading stock {ticker} from yfinance: {e}")
 
 def run_regime_pipeline(k, vol_win, ret_win, mom_win, rsi_win, selected_stocks, benchmark_ticker=None):
     global _RAW_PRICE_CACHE, _CUSTOM_PRICE_CACHE
